@@ -13,6 +13,15 @@ function cartesian_pendulum(U, inp, p, t)
     x^2 + y^2 - 1]
 end
 
+function cartesian_pendulum(dU, U, inp, p, t)
+    x,y,u,v,τ = U
+    SA[u;
+    v;
+    - τ*x;
+    - (τ*y - 1);
+    x^2 + y^2 - 1] - [dU[1:4]; 0]
+end
+
 @testset "SimpleCollocation.jl" begin
     n = 5
     N = 100
@@ -27,7 +36,7 @@ end
     discrete_dynamics(x, 0, 0, 0)
     
     X = [x]
-    for i = 2:100
+    for i = 2:N
         # @show i
         x = discrete_dynamics(x, 0, 0, 0)
         push!(X, x)
@@ -45,5 +54,22 @@ end
     # Test that it's possible to differentiate through
     A = ForwardDiff.jacobian(x -> discrete_dynamics(x, 0, 0, 0), x)
     @test size(A) == (5, 5)
+
+
+    # Test residual formulation
+    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1; n, abstol=1e-7, residual=true)
+
+    θ0 = π/3
+    x = [sin(θ0), -cos(θ0), 0, 0, 0.1]
+    discrete_dynamics(x, 0, 0, 0)
+    
+    X = [x]
+    for i = 2:N
+        # @show i
+        x = discrete_dynamics(x, 0, 0, 0)
+        push!(X, x)
+    end
+    Xm = reduce(hcat, X)
+    @test Xm[:, 2:10:end] ≈ Xm_bench atol=1e-5
     
 end

@@ -35,6 +35,7 @@ struct SimpleColloc{F,T,DT,TP,CT,NP,S}
     cache::CT
     nlproblem::NP
     solver::S
+    residual::Bool
 end
 
 function get_cache!(integ::SimpleColloc, x::Array{T})::Tuple{Vector{T}, Matrix{T}} where T
@@ -43,7 +44,7 @@ end
 
 
 """
-SimpleColloc(dyn, Ts, nx, na; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson())
+    SimpleColloc(dyn, Ts, nx, na; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
 
 A simple direct collocation integrator that can be stepped manually, similar to the function returned by [`MPC.rk4`](@ref).
 
@@ -58,8 +59,9 @@ A Gauss-Lobatto collocation method is used to discretize the dynamics. The resul
 - `na`: Number of algebraic variables
 - `n`: Number of collocation points
 - `abstol`: Tolerance for the root finding algorithm
+- `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This si sometimes called "fully implicit form".
 """
-function SimpleColloc(dyn, Ts, nx, na; n=5, abstol=1e-8, solver=SimpleNewtonRaphson())
+function SimpleColloc(dyn, Ts, nx, na; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false)
     D, taupoints = diffoperator(n, Ts)
     cv = zeros((nx+na)*n)
     x = zeros(nx+na, n)
@@ -67,11 +69,11 @@ function SimpleColloc(dyn, Ts, nx, na; n=5, abstol=1e-8, solver=SimpleNewtonRaph
 
     problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
 
-    SimpleColloc(dyn, Ts, nx, na, D, taupoints, abstol, cache, problem, solver)
+    SimpleColloc(dyn, Ts, nx, na, D, taupoints, abstol, cache, problem, solver, residual)
 end
 
 function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
-    (; dyn, nx, na, D, taupoints) = integ
+    (; dyn, nx, na, D, taupoints, residual) = integ
     cv, x_cache = get_cache!(integ, xv)
     x = reshape(xv, nx+na, :)::Matrix{T} # NOTE: there are some allocations here that can be ommitted by not reshaping and instead index xv with x_inds, change the mul to operate on vector form and take care of the .-
 
@@ -81,15 +83,25 @@ function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
     inds_alg    = (nx+1:nx+na)
 
     x_cache .= x .- x0
-    simple_mul!(reshape(cv, nx+na, n_c), x_cache, D')
+    ẋ = reshape(cv, nx+na, n_c) # This renames cv to ẋ
+    simple_mul!(ẋ, x_cache, D') # Applying the diff operator computes ẋ
 
-    @views for k in 1:n_c
-        temp_dyn      = dyn(x[:,k], u, p, t+taupoints[k])
-        cv[inds_c]  .-= temp_dyn[inds_x]
-        inds_c        = inds_c .+ (nx+na)
+    if residual
+        allinds = 1:(nx+na)
+        @views for k in 1:n_c
+            res          = dyn(ẋ[:,k], x[:,k], u, p, t+taupoints[k])
+            cv[allinds] .= res
+            allinds      = allinds .+ (nx+na)
+        end
+    else
+        @views for k in 1:n_c
+            temp_dyn      = dyn(x[:,k], u, p, t+taupoints[k])
+            cv[inds_c]  .-= temp_dyn[inds_x]
+            inds_c        = inds_c .+ (nx+na)
 
-        cv[inds_alg] .=  temp_dyn[nx+1:end]
-        inds_alg      = inds_alg .+ (nx+na)
+            cv[inds_alg] .=  temp_dyn[nx+1:end]
+            inds_alg      = inds_alg .+ (nx+na)
+        end
     end
     cv
 end
