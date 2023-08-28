@@ -2,10 +2,6 @@ ENV["GKSwstype"] = 322 # workaround for gr segfault on GH actions
 # ENV["GKS_WSTYPE"]=100 # try this if above does not work
 using Documenter, SeeToDee
 
-using Plots
-gr()
-
-
 makedocs(
       sitename = "SeeToDee Documentation",
       doctest = false,
