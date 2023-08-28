@@ -99,7 +99,7 @@ end
 
 
 """
-    SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
+    SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=NewtonRaphson(), residual=false)
 
 A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`Rk4`](@ref).
 
@@ -177,7 +177,7 @@ function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     (; nx, na) = integ
     n_c = length(integ.τ)
     problem = SciMLBase.remake(integ.nlproblem, u0=vec(x0*ones(1, n_c)),p=(integ, x0, u, p, t))
-    solution = solve(problem, integ.solver, abstol)
+    solution = solve(problem, integ.solver; abstol)
     @views T(solution.u[end-nx-na+1:end])
 end
 
@@ -200,7 +200,7 @@ function initialize(integ, x0, p, t=0.0; solver = integ.solver, abstol = integ.a
     norm(res0[alginds]) < abstol && return x0
     res = (z, _) -> dyn([x0[diffinds]; z], u, p, t)[alginds]
     problem = NonlinearProblem(res, x0[alginds], p)
-    solution = solve(problem, solver, abstol)
+    solution = solve(problem, solver; abstol)
     [x0[diffinds]; solution.u]
 end
 
