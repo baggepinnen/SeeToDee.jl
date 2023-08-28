@@ -1,4 +1,4 @@
-using SimpleCollocation
+using SeeToDee
 using Test
 using StaticArrays
 using ForwardDiff
@@ -22,7 +22,7 @@ function cartesian_pendulum(dU, U, inp, p, t)
     x^2 + y^2 - 1] - [dU[1:4]; 0]
 end
 
-@testset "SimpleCollocation.jl" begin
+@testset "SeeToDee.jl" begin
     n = 5
     N = 100
     Ts = 30/N
@@ -73,3 +73,60 @@ end
     @test Xm[:, 2:10:end] ≈ Xm_bench atol=1e-5
     
 end
+
+
+function cartpole(x, u, p, _=0)
+    T = promote_type(eltype(x), eltype(u))
+    mc, mp, l, g = 1.0, 0.2, 0.5, 9.81
+
+    q  = x[SA[1, 2]]
+    qd = x[SA[3, 4]]
+
+    s = sin(q[2])
+    c = cos(q[2])
+
+    H = @SMatrix [mc+mp mp*l*c; mp*l*c mp*l^2]
+    C = @SMatrix [0 -mp*qd[2]*l*s; 0 0]
+    G = @SVector [0, mp * g * l * s]
+    B = @SVector [1, 0]
+    qdd = -H \ (C * qd + G - B * u[1])
+    return [qd; qdd]::SVector{4, T}
+end
+
+function cartpole_implicit(dx, x, u, p, _=0)
+    T = promote_type(eltype(x), eltype(u))
+    mc, mp, l, g = 1.0, 0.2, 0.5, 9.81
+
+    q  = x[SA[1, 2]]
+    qd = x[SA[3, 4]]
+
+    s = sin(q[2])
+    c = cos(q[2])
+
+    H = @SMatrix [mc+mp mp*l*c; mp*l*c mp*l^2]
+    C = @SMatrix [0 -mp*qd[2]*l*s; 0 0]
+    G = @SVector [0, mp * g * l * s]
+    B = @SVector [1, 0]
+    qdd = (C * qd + G - B * u[1])
+    return [qd; -qdd] - [dx[SA[1, 2]]; H*dx[SA[3, 4]]]
+end
+
+n = 5
+discrete_dynamics = SimpleColloc(cartpole, Ts, 4, 0; n, abstol=1e-10, residual=false)
+discrete_dynamics_implicit = SimpleColloc(cartpole_implicit, Ts, 4, 0; n, abstol=1e-10, residual=true)
+discrete_dynamics_rk = rk4(cartpole, Ts; supersample=2)
+
+x = SA[1.0, 2.0, 3.0, 4.0]
+u = SA[1.0]
+
+
+x1 = discrete_dynamics(x, u, 0, 0)
+x2 = discrete_dynamics_implicit(x, u, 0, 0)
+# x3 = discrete_dynamics_rk(x, u, 0, 0)
+
+@test x1 ≈ x2 atol=1e-9
+# @test x1 ≈ x3 atol=1e-2
+
+# @btime $discrete_dynamics($x, $u, 0, 0);
+# @btime $discrete_dynamics_implicit($x, $u, 0, 0); # Maybe a tiny improvement on this example
+# @btime $discrete_dynamics_rk($x, $u, 0, 0); # 200x faster
