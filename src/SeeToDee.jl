@@ -103,16 +103,16 @@ end
 
 A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`Rk4`](@ref).
 
-This integrator supports algebraic equations (DAE), the dynamics is expected to be on the form `(x,u,p,t)->[ẋ; res]` where `x` is the differential state, `res` are the algebraic residuals, `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit).
+This integrator supports algebraic equations (DAE), the dynamics is expected to be on the form `(x,u,p,t)->[ẋ; res]` where `x` is the differential state, `res` are the algebraic residuals, `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit). The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
 
-A Gauss-Lobatto collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method.
+A Gauss-Lobatto collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)
 - `Ts`: Sample time
 - `nx`: Number of differential state variables
 - `na`: Number of algebraic variables
-- `n`: Number of collocation points
+- `n`: Number of collocation points. `n=2` corresponds to trapezoidal integration.
 - `abstol`: Tolerance for the root finding algorithm
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
