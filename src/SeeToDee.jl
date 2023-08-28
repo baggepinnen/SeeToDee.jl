@@ -1,6 +1,6 @@
 module SeeToDee
 
-using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff
+using FastGaussQuadrature, NonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff
 
 export SimpleColloc
 
@@ -117,7 +117,7 @@ A Gauss-Lobatto collocation method is used to discretize the dynamics. The resul
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
 """
-function SimpleColloc(dyn, Ts, nx, na, nu; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false)
+function SimpleColloc(dyn, Ts, nx, na, nu; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false)
     D, τ = diffoperator(n, Ts)
     cv = zeros((nx+na)*n)
     x = zeros(nx+na, n)
