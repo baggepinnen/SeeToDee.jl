@@ -16,16 +16,16 @@ x_{t+Ts} = f(x_t, u_t, p, t)
 that advances the state from time ``t`` to time ``t+T_s``, with a [Zero-order-Hold (ZoH)](https://en.wikipedia.org/wiki/Zero-order_hold) assumption on the input ``u``.
 
 The integrators in this package focus on
+- **Inputs are first class**, i.e., the signature of the dynamics take input signals (such as control signals or disturbance inputs) as arguments. This is in contrast to the DifferentialEquations ecosystem, where there are [several different ways of handling inputs](https://help.juliahub.com/juliasimcontrol/dev/simulation/), none of which are quite first class.
 - **Low overhead** for single-step integration, i.e., no solution handling, no interpolation, nothing fancy at all.
-- **Fixed time step**. All integrators are non-adaptive, i.e., the integrators do not change their step size using error control. This typically makes the integrator have a more **predictable runtime**. It also reduces overhead without affecting accuracy in situations when the fixed step-size is small in relation to what would be required to meet the desired accuracy.
+- **Fixed time step**. All integrators are non-adaptive, i.e., the integrators do not change their step size using error control. This typically makes the integrator have a more **predictable runtime**. It also reduces overhead without affecting accuracy in situations when the fixed step-size is small in relation to what would be required to meet the desired accuracy, a situation which is uncommon when simulating control systems.
 - **Dirt-simple interface**, i.e., you literally use the integrator as a function `x⁺ = f(x, u, p, t)` that you can call in a loop etc. to perform simulations.
-- **Inputs are first class**, i.e., the signature of the dynamics take input signals (such as controlled inputs or disturbance inputs) as arguments. This is in contrast to the DifferentialEquations ecosystem, where there are [several different ways of handling inputs](https://help.juliahub.com/juliasimcontrol/dev/simulation/), none of which are first class.
 - Most things are **manual**. Want to simulate a trajectory? Write a loop!
 
 ## Available discretization methods
 The following methods are available
 - [`SeeToDee.Rk4`](@ref) An explicit 4th order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
-- [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method (includes trapezoidal integration as a special case) with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form `x⁺ = f(ẋ, x, u, p, t)`.
+- [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method (includes trapezoidal integration as a special case) with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form $0 = F(ẋ, x, u, p, t)$.
 
 
 ## Example
@@ -58,8 +58,10 @@ x0 = SA[1.0, 2.0, 3.0, 4.0]
 u0 = SA[1.0]
 p = mc, mp, l, g = 1.0, 0.2, 0.5, 9.81
 
-x1_rk4 = discrete_dynamics_rk(x0, u0, $p, 0)
+x1_rk4 = discrete_dynamics_rk(x0, u0, p, 0)
 ```
+
+The function `discrete_dynamics_rk` is now the discretized dynamics $x^+ = f(x, u, p, t)$, and `x1_rk4` is the state at time $0+T_s$. 
 
 Next, we do the same but with [`SeeToDee.SimpleColloc`](@ref) instead of [`SeeToDee.Rk4`](@ref).
 ```@example STEP
@@ -70,7 +72,7 @@ nu = 1 # Number of inputs
 solver = NonlinearSolve.NewtonRaphson()
 
 discrete_dynamics_colloc = SeeToDee.SimpleColloc(cartpole, Ts, nx, na, nu; n, abstol=1e-10, solver)
-x1_colloc = discrete_dynamics_colloc(x0, u0, $p, 0)
+x1_colloc = discrete_dynamics_colloc(x0, u0, p, 0)
 
 using Test
 @test x1_rk4 ≈ x1_colloc atol=1e-2 # Test the it's roughly the same as the output of RK4
@@ -111,7 +113,7 @@ end
 
 discrete_dynamics_implicit = SimpleColloc(cartpole_implicit, Ts, nx, na, nu; n, abstol=1e-10, residual=true, solver)
 
-x1_implicit = discrete_dynamics_implicit(x0, u0, 0, 0)
+x1_implicit = discrete_dynamics_implicit(x0, u0, p, 0)
 
 @test x1_implicit ≈ x1_colloc atol=1e-9
 ```

@@ -2,6 +2,7 @@ using SeeToDee
 using Test
 using StaticArrays
 using ForwardDiff
+using NonlinearSolve
 
 # This has to be defined outside of the testset
 function cartesian_pendulum(U, inp, p, t)
@@ -62,7 +63,7 @@ end
     n = 5
     N = 100
     Ts = 30/N
-    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-7)
+    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-9)
     
     @test length(discrete_dynamics.τ) == n
     @test size(discrete_dynamics.D) == (n, n)

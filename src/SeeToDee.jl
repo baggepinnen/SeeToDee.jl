@@ -1,6 +1,6 @@
 module SeeToDee
 
-using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff
+using FastGaussQuadrature, NonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff
 
 export SimpleColloc
 
@@ -99,25 +99,33 @@ end
 
 
 """
-    SimpleColloc(dyn, Ts, nx, na; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
+    SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=NewtonRaphson(), residual=false)
 
 A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`Rk4`](@ref).
 
-This integrator supports algebraic equations (DAE), the dynamics is expected to be on the form `(x,u,p,t)->[ẋ; res]` where `x` is the differential state, `res` are the algebraic residuals, `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit).
+This integrator supports differential-algebraic equations (DAE), the dynamics is expected to be on the form `(xz,u,p,t)->[ẋ; res]` where `xz` is a vector `[x; z]` contaning the differential state `x` and the algebraic variables `z` in this order. `res` is the algebraic residuals, and `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit). The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
 
-A Gauss-Lobatto collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method.
+This integrator also supports a fully implicit form of the dynamics
+```math
+0 = F(ẋ, x, u, p, t)
+```
+When using this interface, the dynamics is called using an additional input `ẋ` as the first argument, and the return value is expected to be the residual of the entire state descriptor.
+
+
+A Gauss-Lobatto collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)
 - `Ts`: Sample time
 - `nx`: Number of differential state variables
 - `na`: Number of algebraic variables
-- `n`: Number of collocation points
+- `nu`: Number of inputs
+- `n`: Number of collocation points. `n=2` corresponds to trapezoidal integration.
 - `abstol`: Tolerance for the root finding algorithm
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
 """
-function SimpleColloc(dyn, Ts, nx, na, nu; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false)
+function SimpleColloc(dyn, Ts, nx, na, nu; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false)
     D, τ = diffoperator(n, Ts)
     cv = zeros((nx+na)*n)
     x = zeros(nx+na, n)
@@ -169,7 +177,7 @@ function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     (; nx, na) = integ
     n_c = length(integ.τ)
     problem = SciMLBase.remake(integ.nlproblem, u0=vec(x0*ones(1, n_c)),p=(integ, x0, u, p, t))
-    solution = solve(problem, integ.solver, abstol)
+    solution = solve(problem, integ.solver; abstol)
     @views T(solution.u[end-nx-na+1:end])
 end
 
@@ -192,7 +200,7 @@ function initialize(integ, x0, p, t=0.0; solver = integ.solver, abstol = integ.a
     norm(res0[alginds]) < abstol && return x0
     res = (z, _) -> dyn([x0[diffinds]; z], u, p, t)[alginds]
     problem = NonlinearProblem(res, x0[alginds], p)
-    solution = solve(problem, solver, abstol)
+    solution = solve(problem, solver; abstol)
     [x0[diffinds]; solution.u]
 end
 
