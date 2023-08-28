@@ -2,7 +2,7 @@
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "a1454fa1d5c9030c48de8a5043f9e0eb86f159f2"
+project_hash = "852e76c9948282a3cd734b86d47c6a9b36ba9f22"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f5c25e8a5b29b5e941b7408bc8cc79fea4d9ef9a"
@@ -687,7 +687,7 @@ uuid = "c0aeaf25-5076-4817-a8d5-81caf7dfa961"
 version = "0.3.6"
 
 [[deps.SeeToDee]]
-deps = ["FastGaussQuadrature", "ForwardDiff", "LinearAlgebra", "NonlinearSolve", "PreallocationTools", "SimpleNonlinearSolve", "StaticArrays"]
+deps = ["FastGaussQuadrature", "ForwardDiff", "LinearAlgebra", "NonlinearSolve", "PreallocationTools", "StaticArrays"]
 path = ".."
 uuid = "1c904df7-48cd-41e7-921b-d889ed9a470c"
 version = "1.0.0-DEV"

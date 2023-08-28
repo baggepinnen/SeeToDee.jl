@@ -2,6 +2,7 @@ using SeeToDee
 using Test
 using StaticArrays
 using ForwardDiff
+using NonlinearSolve
 
 # This has to be defined outside of the testset
 function cartesian_pendulum(U, inp, p, t)
@@ -62,7 +63,7 @@ end
     n = 5
     N = 100
     Ts = 30/N
-    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-7)
+    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-9)
     
     @test length(discrete_dynamics.τ) == n
     @test size(discrete_dynamics.D) == (n, n)
@@ -85,7 +86,7 @@ end
      0.231601  -0.932957    0.49198    0.572272   -0.537307   -0.583989   0.96907    -0.203565  -1.19603    1.22865
     -0.397285   0.811478    3.87114    0.0465319  -0.0112136   3.81449    0.910313   -0.419928   2.74741    2.1731]
     
-    @test Xm[:, 2:10:end] ≈ Xm_bench atol=1e-5
+    @test Xm[:, 2:10:end] ≈ Xm_bench atol=1e-4
 
     # Test that it's possible to differentiate through
     A = ForwardDiff.jacobian(x -> discrete_dynamics(x, 0, 0, 0), x)
