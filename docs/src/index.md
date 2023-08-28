@@ -22,10 +22,10 @@ The integrators in this package focus on
 - **Inputs are first class**, i.e., the signature of the dynamics take input signals (such as controlled inputs or disturbance inputs) as arguments. This is in contrast to the DifferentialEquations ecosystem, where there are [several different ways of handling inputs](https://help.juliahub.com/juliasimcontrol/dev/simulation/), none of which are first class.
 - Most things are **manual**. Want to simulate a trajectory? Write a loop!
 
-## Available methods
+## Available discretization methods
 The following methods are available
-- [`SeeToDee.Rk4`](@ref) A 4th order Runge-Kutta integrator with ZoH input. Supports differential equations only. If called with StaticArrays, this method is allocation free.
-- [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method (includes trapezoidal integration as a special case) with ZoH input. Supports differential-algebraic equations (DAE) and fully implicit form `x⁺ = f(ẋ, x, u, p, t)`.
+- [`SeeToDee.Rk4`](@ref) An explicit 4th order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
+- [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method (includes trapezoidal integration as a special case) with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form `x⁺ = f(ẋ, x, u, p, t)`.
 
 
 ## Example
@@ -120,3 +120,19 @@ x1_implicit = discrete_dynamics_implicit(x0, u0, 0, 0)
 @btime $discrete_dynamics_implicit($x0, $u0, 0, 0); # 21.911 μs (84 allocations: 50.39 KiB)
 ```
 For this system, the solve time is almost identical to the explicit collocation case, but for larger systems, the implicit form can be faster.
+
+## Simulate whole trajectories
+Simulation is done by implementing the loop manually, for example (pseudocode)
+```julia
+discrete_dynamics = SeeToDee.Rk4(cartpole, Ts; supersample=2)
+
+x = x0
+X = [x]
+U = []
+for i = 1:T
+    u = compute_control_input(x)      # State feedback, MPC, etc.
+    x = discrete_dynamics(x, u, p, t) # Propagate state forward one step
+    push!(X, x) # Log data
+    push!(U, u)
+end
+```
