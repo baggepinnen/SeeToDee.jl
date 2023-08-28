@@ -1,6 +1,7 @@
 # SeeToDee
 
-[![Build Status](https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml?query=branch%3Amain)[![Documentation, stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://baggepinnen.github.io/SeeToDee.jl/stable)
+[![Build Status](https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Documentation, stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://baggepinnen.github.io/SeeToDee.jl/stable)
 [![Documentation, latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://baggepinnen.github.io/SeeToDee.jl/dev)
 
 
@@ -14,7 +15,7 @@ this package contains *integrators* that convert the continuous-time dynamics in
 ```math
 x_{t+Ts} = f(x_t, u_t, p, t)
 ```
-that advances the state from time ``t`` to time ``t+T_s``, with a [Zero-order-Hold (ZoH)](https://en.wikipedia.org/wiki/Zero-order_hold) assumption on the input ``u``.
+that advances the state from time $t$ to time $t+T_s$, with a [Zero-order-Hold (ZoH)](https://en.wikipedia.org/wiki/Zero-order_hold) assumption on the input $u$.
 
 The integrators in this package focus on
 - **Low overhead** for single-step integration, i.e., no solution handling, no interpolation, nothing fancy at all.
