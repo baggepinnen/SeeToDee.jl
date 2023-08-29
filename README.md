@@ -13,7 +13,7 @@ Given a continuous-time dynamics function
 ```
 this package contains *integrators* that convert the continuous-time dynamics into a discrete-time dynamics function
 ```math
-x_{t+Ts} = f(x_t, u_t, p, t)
+x_{t+T_s} = f(x_t, u_t, p, t)
 ```
 that advances the state from time $t$ to time $t+T_s$, with a [Zero-order-Hold (ZoH)](https://en.wikipedia.org/wiki/Zero-order_hold) assumption on the input $u$.
 

@@ -3,7 +3,7 @@
 [![Build Status](https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
-SeeToDee implements low-overhead, nonlinear variants of the classical [`c2d`](https://juliacontrol.github.io/ControlSystems.jl/dev/lib/synthesis/#ControlSystemsBase.c2d-Tuple{AbstractStateSpace{%3C:Continuous},%20AbstractMatrix,%20Real}) function from [ControlSystems.jl](https://github.com/JuliaControl/ControlSystems.jl).
+SeeToDee implements low-overhead, nonlinear variants of the classical [`c2d`](https://juliacontrol.github.io/ControlSystems.jl/dev/lib/synthesis/#ControlSystemsBase.c2d) function from [ControlSystems.jl](https://github.com/JuliaControl/ControlSystems.jl).
 
 Given a continuous-time dynamics function
 ```math
@@ -11,7 +11,7 @@ Given a continuous-time dynamics function
 ```
 this package contains *integrators* that convert the continuous-time dynamics into a discrete-time dynamics function
 ```math
-x_{t+Ts} = f(x_t, u_t, p, t)
+x_{t+T_s} = f(x_t, u_t, p, t)
 ```
 that advances the state from time ``t`` to time ``t+T_s``, with a [Zero-order-Hold (ZoH)](https://en.wikipedia.org/wiki/Zero-order_hold) assumption on the input ``u``.
 
