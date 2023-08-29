@@ -22,11 +22,28 @@ The integrators in this package focus on
 - **Dirt-simple interface**, i.e., you literally use the integrator as a function `x⁺ = f(x, u, p, t)` that you can call in a loop etc. to perform simulations.
 - Most things are **manual**. Want to simulate a trajectory? Write a loop!
 
+
+
 ## Available discretization methods
 The following methods are available
 - [`SeeToDee.Rk4`](@ref) An explicit 4th order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
 - [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method (includes trapezoidal integration as a special case) with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form $0 = F(ẋ, x, u, p, t)$.
 
+See their docstrings for more details.
+
+
+## When is this package useful?
+Control systems are most of the time implemented in discrete time a computer, but they may interact with the continuous-time world around them. Simulation of the combined system including both the discrete-time controller and the continuous-time world is therefore a common task. The typically fixed sample interval of the controller, $T_s$, is thus presenting an upper bound to the length of the integration step in the simulation, an adaptive solver cannot take longer steps than this since the input is discountinuous with the invocation of the controller. If the sample time is short, a good adaptive algorithm will thus always take a step of length $T_s$, but figuring this out incurs unnecessary overhead. 
+
+The invocation of the controller also means that some additional code, the implementation of the controller, has to be run at a fixed interval, but not in-between. The DifferentialEquations ecosystem provides _callbacks_ for this purpose. Making use of the callback is associated with a [very large amount of boilerplate](https://help.juliahub.com/juliasimcontrol/dev/simulation/#Use-of-a-discrete-controller-in-a-continuous-time-simulation) already for simple control-system simulations.
+
+It's also common to want to do _more than just simulation_, for example, linearize the dynamics or state estimation. In both of those cases, one may be interested in integrating a single step of length $T_s$ only, starting from an arbitrary initial condition. In such situations, a one-liner function call is then preferable to a 10+ lines configuration of a traditional ODE solver, combined with the appropriate calls to `remake` etc. in-between calls.
+
+### When should you not use this package?
+- If inputs that change at a fixed interval is not an integral part of your dynamics.
+- Your system requires a very special integrator for simulation.
+- Your system is very large, e.g., a discretized PDE.
+- If the sample interval $T_s$ is long in relation to the time constants of the system, then an adaptive solver may be more efficient despite the discontinuities.
 
 ## Example
 The example below defines a dynamics function `cartpole` and then discretizes this using [`SeeToDee.Rk4`](@ref) and propagates the state forward one time step
