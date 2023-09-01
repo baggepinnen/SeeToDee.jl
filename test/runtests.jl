@@ -3,6 +3,7 @@ using Test
 using StaticArrays
 using ForwardDiff
 using NonlinearSolve
+using FastGaussQuadrature
 
 # This has to be defined outside of the testset
 function cartesian_pendulum(U, inp, p, t)
