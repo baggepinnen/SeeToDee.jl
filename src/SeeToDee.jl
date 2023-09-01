@@ -27,6 +27,8 @@ Discretize a continuous-time dynamics function `f` using RK4 with sample time `T
 `f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
 
 `supersample` determins the number of internal steps, 1 is often sufficient, but this can be increased to make the interation more accurate. `u` is assumed constant during all steps.
+
+If called with StaticArrays, this integrator is allocation free.
 """
 function Rk4(f::F, Ts0; supersample::Integer = 1) where {F}
     supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
@@ -70,12 +72,21 @@ end
 
 simple_mul!(C::AbstractMatrix{Any}, A, B) = mul!(C,A,B)
 
-function diffoperator(n, Ts)
-    τ, _ = gausslobatto(n+1)
-    τ = (τ[2:end] .+ 1) ./ 2
+function diffoperator(n, Ts::T, nodetype::typeof(gausslobatto)) where T
+    τ, w = nodetype(n+1)
+    τ = (big.(τ)[2:end] .+ 1) ./ 2
     A = τ.^(0:n-1)'.*(1:n)'
     B = τ.^(1:n)'
-    (A/B) ./ Ts, τ
+    T.((A/B) ./ Ts), T.(τ), w
+end
+
+function diffoperator(n, Ts::T, ::typeof(gaussradau) = gaussradau) where T
+    τ, w = gaussradau(n)
+    τ = reverse(-τ) # We reverse the nodes to get the representation that includes the end-point rather than the initial point
+    τ = (big.(τ) .+ 1) ./ 2
+    A = τ.^(0:n-1)'.*(1:n)'
+    B = τ.^(1:n)'
+    T.((A/B) ./ Ts), T.(τ), w
 end
 
 struct SimpleColloc{F,T,DT,TP,CT,NP,S}
@@ -112,7 +123,7 @@ This integrator also supports a fully implicit form of the dynamics
 When using this interface, the dynamics is called using an additional input `ẋ` as the first argument, and the return value is expected to be the residual of the entire state descriptor.
 
 
-A Gauss-Lobatto collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
+A Gauss-Radau collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)
@@ -125,16 +136,17 @@ A Gauss-Lobatto collocation method is used to discretize the dynamics. The resul
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
 """
-function SimpleColloc(dyn, Ts, nx, na, nu; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false)
-    D, τ = diffoperator(n, Ts)
-    cv = zeros((nx+na)*n)
-    x = zeros(nx+na, n)
-    ẋ = zeros(nx+na, n)
+function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
+    T = float(T0)
+    D, τ = diffoperator(n, Ts, nodetype)
+    cv = zeros(T, (nx+na)*n)
+    x = zeros(T, nx+na, n)
+    ẋ = zeros(T, nx+na, n)
     cache = (DiffCache(cv), DiffCache(x), DiffCache(ẋ), DiffCache(copy(x)))
 
     problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
 
-    SimpleColloc(dyn, Ts, nx, na, nu, D, τ, abstol, cache, problem, solver, residual)
+    SimpleColloc(dyn, Ts, nx, na, nu, T.(D), T.(τ), abstol, cache, problem, solver, residual)
 end
 
 function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
@@ -144,9 +156,9 @@ function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
     copyto!(x, xv) # Reshape but allocation free
 
     n_c = length(τ)
-    inds_c      = (1:nx)   
-    inds_x      = (1:nx)
-    inds_alg    = (nx+1:nx+na)
+    inds_c      = 1:nx
+    inds_x      = 1:nx
+    inds_alg    = nx+1:nx+na
 
     x_cache .= x .- x0
     # ẋ = reshape(cv, nx+na, n_c) # This renames cv to ẋ

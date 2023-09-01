@@ -18,7 +18,7 @@ that advances the state from time ``t`` to time ``t+T_s``, with a [Zero-order-Ho
 The integrators in this package focus on
 - **Inputs are first class**, i.e., the signature of the dynamics take input signals (such as control signals or disturbance inputs) as arguments. This is in contrast to the DifferentialEquations ecosystem, where there are [several different ways of handling inputs](https://help.juliahub.com/juliasimcontrol/dev/simulation/), none of which are quite first class.
 - **Low overhead** for single-step integration, i.e., no solution handling, no interpolation, nothing fancy at all.
-- **Fixed time step**. All integrators are non-adaptive, i.e., the integrators do not change their step size using error control. This typically makes the integrator have a more **predictable runtime**. It also reduces overhead without affecting accuracy in situations when the fixed step-size is small in relation to what would be required to meet the desired accuracy, a situation which is uncommon when simulating control systems.
+- **Fixed time step**. All integrators are non-adaptive, i.e., the integrators do not change their step size using error control. This typically makes the integrator have a more **predictable runtime**. It also reduces overhead without affecting accuracy in situations when the fixed step-size is small in relation to what would be required to meet the desired accuracy, a situation which is uncommon when simulating control systems. It also means that the user is responsible for checking the accuracy for the chosen step size.
 - **Dirt-simple interface**, i.e., you literally use the integrator as a function `x⁺ = f(x, u, p, t)` that you can call in a loop etc. to perform simulations.
 - Most things are **manual**. Want to simulate a trajectory? Write a loop!
 
@@ -155,3 +155,9 @@ for i = 1:T
     push!(U, u)
 end
 ```
+
+
+## Usage in the wild
+This package is used in the following places
+- [DiscretePIDs.jl](https://github.com/JuliaControl/DiscretePIDs.jl#example-using-seetodee)
+- [LowLevelParticleFilters.jl](https://github.com/baggepinnen/LowLevelParticleFilters.jl) (to appear)

@@ -63,7 +63,7 @@ end
     n = 5
     N = 100
     Ts = 30/N
-    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-9)
+    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-9, nodetype=gausslobatto)
     
     @test length(discrete_dynamics.τ) == n
     @test size(discrete_dynamics.D) == (n, n)
@@ -94,7 +94,7 @@ end
 
 
     # Test residual formulation
-    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-7, residual=true)
+    discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-7, residual=true, nodetype=gausslobatto)
 
     θ0 = π/3
     x = [sin(θ0), -cos(θ0), 0, 0, 0.1]
@@ -115,7 +115,8 @@ end
     n = 5
     discrete_dynamics = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-10, residual=false)
     discrete_dynamics_implicit = SeeToDee.SimpleColloc(cartpole_implicit, Ts, 4, 0, 1; n, abstol=1e-10, residual=true)
-    discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=2)
+    discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=3)
+    discrete_dynamics_rk_ss = SeeToDee.Rk4(cartpole, Ts; supersample=200)
 
     x = SA[1.0, 2.0, 3.0, 4.0]
     u = SA[1.0]
@@ -124,9 +125,11 @@ end
     x1 = discrete_dynamics(x, u, 0, 0)
     x2 = discrete_dynamics_implicit(x, u, 0, 0)
     x3 = discrete_dynamics_rk(x, u, 0, 0)
+    x4 = discrete_dynamics_rk_ss(x, u, 0, 0)
 
     @test x1 ≈ x2 atol=1e-9
     @test x1 ≈ x3 atol=1e-2
+    @test x1 ≈ x4 atol=1e-5
 
     # @btime $discrete_dynamics($x, $u, 0, 0);
     # @btime $discrete_dynamics_implicit($x, $u, 0, 0); # Maybe a tiny improvement on this example
@@ -134,3 +137,37 @@ end
 
 
 end
+
+
+# Accuracy test
+# using FastGaussQuadrature
+# using OrdinaryDiffEq
+
+# Ts = 0.8
+
+# prob = ODEProblem((x,p,t)->cartpole(x, u, p, t), x, (0.0, Ts))
+# sol = solve(prob, Vern9(), reltol=1e-15, abstol=1e-15)
+# xa = sol.u[end]
+
+# discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=100)
+# xrk = discrete_dynamics_rk(x, u, 0, 0)
+
+
+# ##
+# n = 5
+# ns = 2:40
+# err_l = Float64[]
+# err_r = Float64[]
+# for n in ns
+#     discrete_dynamics_l = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-14, nodetype = gausslobatto)
+#     discrete_dynamics_r = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-14, nodetype = gaussradau)
+#     xl = discrete_dynamics_l(x, u, 0, 0)
+#     xr = discrete_dynamics_r(x, u, 0, 0)
+#     push!(err_l, norm(xa-xl))
+#     push!(err_r, norm(xa-xr))
+# end
+
+# plot(ns, err_l, label="Gauss-Lobatto", yscale=:log10)
+# plot!(ns, err_r, label="Gauss-Radau")
+# hline!([norm(xa-xrk)], lab="RK4")
+# display(current())
