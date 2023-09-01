@@ -143,18 +143,20 @@ end
 # using FastGaussQuadrature
 # using OrdinaryDiffEq
 
+
+
 # Ts = 0.8
 
 # prob = ODEProblem((x,p,t)->cartpole(x, u, p, t), x, (0.0, Ts))
-# sol = solve(prob, Vern9(), reltol=1e-15, abstol=1e-15)
+# sol = solve(prob, Vern9(), reltol=1e-15, abstol=1e-15) # 333.078 μs (14004 allocations: 558.35 KiB)
 # xa = sol.u[end]
 
 # discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=100)
-# xrk = discrete_dynamics_rk(x, u, 0, 0)
+# xrk = discrete_dynamics_rk(x, u, 0, 0) # 10.895 μs (0 allocations: 0 bytes)
 
 
 # ##
-# n = 5
+# n = 11
 # ns = 2:40
 # err_l = Float64[]
 # err_r = Float64[]
@@ -169,5 +171,36 @@ end
 
 # plot(ns, err_l, label="Gauss-Lobatto", yscale=:log10)
 # plot!(ns, err_r, label="Gauss-Radau")
+# hline!([norm(xa-xrk)], lab="RK4")
+# display(current())
+
+
+# ## with super sampling
+
+# function supersample(f::F, n) where F
+#     function (x, u, p, t)
+#         for _ = 1:n
+#             x = f(x, u, p, t)
+#         end
+#         x
+#     end
+# end
+
+# n = 11
+# ns = 2:20
+# err_l = Float64[]
+# err_r = Float64[]
+# n_ss = 5
+# for n in ns
+#     discrete_dynamics_l = supersample(SeeToDee.SimpleColloc(cartpole, Ts/n_ss, 4, 0, 1; n, abstol=1e-14, nodetype = gausslobatto), n_ss)
+#     discrete_dynamics_r = supersample(SeeToDee.SimpleColloc(cartpole, Ts/n_ss, 4, 0, 1; n, abstol=1e-14, nodetype = gaussradau), n_ss)
+#     xl = discrete_dynamics_l(x, u, 0, 0)
+#     xr = discrete_dynamics_r(x, u, 0, 0)
+#     push!(err_l, norm(xa-xl))
+#     push!(err_r, norm(xa-xr))
+# end
+
+# scatter(ns, err_l, label="Gauss-Lobatto", yscale=:log10, xlabel="Number of collocation points", ylabel="Accuracy")
+# scatter!(ns, err_r, label="Gauss-Radau")
 # hline!([norm(xa-xrk)], lab="RK4")
 # display(current())

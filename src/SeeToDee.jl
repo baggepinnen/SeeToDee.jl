@@ -135,6 +135,8 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - `abstol`: Tolerance for the root finding algorithm
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
+
+Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
 """
 function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
     T = float(T0)
