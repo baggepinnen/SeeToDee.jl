@@ -137,6 +137,11 @@ end
     # @btime $discrete_dynamics_rk($x, $u, 0, 0); # 200x faster
 
 
+    @testset "batch" begin
+        @info "Testing batch"
+        include("test_batch.jl")
+    end
+
 end
 
 

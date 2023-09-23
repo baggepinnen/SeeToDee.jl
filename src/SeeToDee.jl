@@ -1,24 +1,23 @@
 module SeeToDee
 
-using FastGaussQuadrature, NonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff
+using FastGaussQuadrature, NonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
 
 export SimpleColloc
 
 """
     A,B = linearize(f, x0, u0, p, t)
 
-Linearize dynamics function `f` w.r.t., state `x`, input `u`. Returns Jacobians `A,B` in
+Linearize dynamics function `f(x, u, p, t)` w.r.t., state `x`, input `u`. Returns Jacobians `A,B` in
 ```math
 ẋ = A\\, Δx + B\\, Δu
 ```
 Works for both continuous and discrete-time dynamics.
 """
-function linearize(f, x, u, p, t)
-    A = ForwardDiff.jacobian(x->f(x, u, p, t), x)
-    B = ForwardDiff.jacobian(u->f(x, u, p, t), u)
+function linearize(f, x, u, args...)
+    A = ForwardDiff.jacobian(x->f(x, u, args...), x)
+    B = ForwardDiff.jacobian(u->f(x, u, args...), u)
     A, B
 end
-
 
 """
     f_discrete = Rk4(f, Ts; supersample = 1)
@@ -30,31 +29,63 @@ Discretize a continuous-time dynamics function `f` using RK4 with sample time `T
 
 If called with StaticArrays, this integrator is allocation free.
 """
-function Rk4(f::F, Ts0; supersample::Integer = 1) where {F}
-    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
-    # Runge-Kutta 4 method
-    Ts = Ts0 / supersample # to preserve type stability in case Ts0 is an integer
-    let Ts = Ts
-        function (x, u, p, t)
-            T = typeof(x)
-            f1 = f(x, u, p, t)
-            f2 = f(x + Ts / 2 * f1, u, p, t + Ts / 2)
-            f3 = f(x + Ts / 2 * f2, u, p, t + Ts / 2)
-            f4 = f(x + Ts * f3, u, p, t + Ts)
-            add = Ts / 6 * (f1 + 2 * f2 + 2 * f3 + f4)
-            # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
-            y = x + add
-            for i in 2:supersample
-                f1 = f(y, u, p, t)
-                f2 = f(y + Ts / 2 * f1, u, p, t + Ts / 2)
-                f3 = f(y + Ts / 2 * f2, u, p, t + Ts / 2)
-                f4 = f(y + Ts * f3, u, p, t + Ts)
-                add = Ts / 6 * (f1 + 2 * f2 + 2 * f3 + f4)
-                y += add
-            end
-            return y
-        end
+struct Rk4{F,TS}
+    f::F
+    Ts::TS
+    supersample::Int
+    function Rk4(f::F, Ts; supersample::Integer = 1) where {F}
+        supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+        new{F, typeof(Ts / 1)}(f, Ts / 1, supersample) # Divide by one to floatify ints
     end
+end
+
+
+function (integ::Rk4{F})(x::SArray, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    Ts2 = Ts / supersample
+    f = integ.f
+    f1 = f(x, u, p, t)
+    f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
+    f3 = f(x + Ts2 / 2 * f2, u, p, t + Ts2 / 2)
+    f4 = f(x + Ts2 * f3, u, p, t + Ts2)
+    add = Ts2 / 6 .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
+    # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
+    y = x + add
+    for i in 2:supersample
+        f1 = f(y, u, p, t)
+        f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
+        f3 = f(y + Ts2 / 2 * f2, u, p, t + Ts2 / 2)
+        f4 = f(y + Ts2 * f3, u, p, t + Ts2)
+        add = Ts2 / 6 .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
+        y += add
+    end
+    return y
+end
+
+function (integ::Rk4{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    Ts2 = Ts / supersample
+    f = integ.f
+    f1 = f(x, u, p, t)
+    xi = x .+ (Ts2 / 2) .* f1
+    f2 = f(xi, u, p, t + Ts2 / 2)
+    xi .= x .+ (Ts2 / 2) .* f2
+    f3 = f(xi, u, p, t + Ts2 / 2)
+    xi .= x .+ Ts2 .* f3
+    f4 = f(xi, u, p, t + Ts2)
+    xi .= (Ts2 / 6) .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
+    # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
+    y = x + xi
+    for i in 2:supersample
+        f1 = f(y, u, p, t)
+        xi = y .+ (Ts2 / 2) .* f1
+        f2 = f(xi, u, p, t + Ts2 / 2)
+        xi .= y .+ (Ts2 / 2) .* f2
+        f3 = f(xi, u, p, t + Ts2 / 2)
+        xi .= y .+ Ts2 .* f3
+        f4 = f(xi, u, p, t + Ts2)
+        xi .= (Ts2 / 6) .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
+        y .+= xi
+    end
+    return y
 end
 
 
@@ -112,7 +143,7 @@ end
 """
     SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=NewtonRaphson(), residual=false)
 
-A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`Rk4`](@ref).
+A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`SeeToDee.Rk4`](@ref).
 
 This integrator supports differential-algebraic equations (DAE), the dynamics is expected to be on the form `(xz,u,p,t)->[ẋ; res]` where `xz` is a vector `[x; z]` contaning the differential state `x` and the algebraic variables `z` in this order. `res` is the algebraic residuals, and `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit). The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
 
@@ -120,7 +151,7 @@ This integrator also supports a fully implicit form of the dynamics
 ```math
 0 = F(ẋ, x, u, p, t)
 ```
-When using this interface, the dynamics is called using an additional input `ẋ` as the first argument, and the return value is expected to be the residual of the entire state descriptor.
+When using this interface, the dynamics is called using an additional input `ẋ` as the first argument, and the return value is expected to be the residual of the entire state descriptor. To use the implicit form, pass `residual = true`.
 
 
 A Gauss-Radau collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
@@ -136,7 +167,9 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
 
-Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
+# Extended help
+- Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
+- To use trapezoidal integration, set `n=2` and `nodetype=SeeToDee.FastGaussQuadrature.gausslobatto`.
 """
 function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
     T = float(T0)
@@ -202,7 +235,7 @@ end
 Given the differential state variables in `x0`, initialize the algebraic variables by solving the nonlinear problem `f(x,u,p,t) = 0` using the provided solver.
 
 # Arguments:
-- `integ`: An intergrator like [`SimpleColloc`](@ref)
+- `integ`: An intergrator like [`SeeToDee.SimpleColloc`](@ref)
 - `x0`: Initial state descriptor (differential and algebraic variables, where the algebraic variables comes last)
 """
 function initialize(integ, x0, p, t=0.0; solver = integ.solver, abstol = integ.abstol)

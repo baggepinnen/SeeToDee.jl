@@ -111,7 +111,6 @@ This is occasionally useful in order to avoid inverting large coordinate-depende
 
 ```@example STEP
 function cartpole_implicit(dx, x, u, p, _=0)
-    T = promote_type(eltype(x), eltype(u))
     mc, mp, l, g = 1.0, 0.2, 0.5, 9.81
 
     q  = x[SA[1, 2]]
@@ -157,7 +156,12 @@ end
 ```
 
 
+## Batch propagation and GPU support
+Using [`SeeToDee.Rk4`](@ref), it's possible to propagate a batch of `N` states forward in time by writing the dynamics to accept matrices `x` and `u` where `size(x) = (nx, N)`. No further changes are required. This also works if `x, u` are GPU arrays, such as those from CUDA.jl. For best performance on the GPU, make sure to construct the `Rk4` object using a sample time of type `Float32` and make sure that your `x, u` are also of element type `Float32`. `N` has to be rather large for this to be worthwhile. Propagating the state in batches can be useful when implementing, e.g., a particle filter.
+
+
 ## Usage in the wild
 This package is used in the following places
 - [DiscretePIDs.jl](https://github.com/JuliaControl/DiscretePIDs.jl#example-using-seetodee)
-- [LowLevelParticleFilters.jl](https://github.com/baggepinnen/LowLevelParticleFilters.jl) (to appear)
+- [LowLevelParticleFilters.jl](https://github.com/baggepinnen/LowLevelParticleFilters.jl), see [tutorial](https://juliahub.com/ui/Notebooks/fredrik-carlson2/controlsystems/dae_stateest.jl).
+- [ODE parameter calibration (video)](https://youtu.be/GKl8Tz9n2gs?si=V4ubuJsRTtSjgVxb)
