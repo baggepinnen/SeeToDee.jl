@@ -19,20 +19,20 @@ function linearize(f, x, u, args...)
     A, B
 end
 
+"""
+    f_discrete = Rk4(f, Ts; supersample = 1)
+
+Discretize a continuous-time dynamics function `f` using RK4 with sample time `Tₛ`. 
+`f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
+
+`supersample` determins the number of internal steps, 1 is often sufficient, but this can be increased to make the interation more accurate. `u` is assumed constant during all steps.
+
+If called with StaticArrays, this integrator is allocation free.
+"""
 struct Rk4{F,TS}
     f::F
     Ts::TS
     supersample::Int
-    """
-        f_discrete = Rk4(f, Ts; supersample = 1)
-    
-    Discretize a continuous-time dynamics function `f` using RK4 with sample time `Tₛ`. 
-    `f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
-    
-    `supersample` determins the number of internal steps, 1 is often sufficient, but this can be increased to make the interation more accurate. `u` is assumed constant during all steps.
-    
-    If called with StaticArrays, this integrator is allocation free.
-    """
     function Rk4(f::F, Ts; supersample::Integer = 1) where {F}
         supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
         new{F, typeof(Ts / 1)}(f, Ts / 1, supersample) # Divide by one to floatify ints
@@ -143,7 +143,7 @@ end
 """
     SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=NewtonRaphson(), residual=false)
 
-A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`Rk4`](@ref).
+A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`SeeToDee.Rk4`](@ref).
 
 This integrator supports differential-algebraic equations (DAE), the dynamics is expected to be on the form `(xz,u,p,t)->[ẋ; res]` where `xz` is a vector `[x; z]` contaning the differential state `x` and the algebraic variables `z` in this order. `res` is the algebraic residuals, and `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit). The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
 
@@ -235,7 +235,7 @@ end
 Given the differential state variables in `x0`, initialize the algebraic variables by solving the nonlinear problem `f(x,u,p,t) = 0` using the provided solver.
 
 # Arguments:
-- `integ`: An intergrator like [`SimpleColloc`](@ref)
+- `integ`: An intergrator like [`SeeToDee.SimpleColloc`](@ref)
 - `x0`: Initial state descriptor (differential and algebraic variables, where the algebraic variables comes last)
 """
 function initialize(integ, x0, p, t=0.0; solver = integ.solver, abstol = integ.abstol)
