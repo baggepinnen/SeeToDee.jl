@@ -40,10 +40,16 @@ struct Rk4{F,TS}
 end
 
 
-function (integ::Rk4{F})(x::SArray, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
-    Ts2 = Ts / supersample
+function (integ::Rk4{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
     f1 = f(x, u, p, t)
+    _inner_rk4(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+end
+
+
+function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    Ts2 = Ts / supersample
+    f = integ.f
     f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
     f3 = f(x + Ts2 / 2 * f2, u, p, t + Ts2 / 2)
     f4 = f(x + Ts2 * f3, u, p, t + Ts2)
@@ -61,10 +67,9 @@ function (integ::Rk4{F})(x::SArray, u, p, t; Ts=integ.Ts, supersample=integ.supe
     return y
 end
 
-function (integ::Rk4{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
-    f1 = f(x, u, p, t)
     xi = x .+ (Ts2 / 2) .* f1
     f2 = f(xi, u, p, t + Ts2 / 2)
     xi .= x .+ (Ts2 / 2) .* f2

@@ -71,7 +71,7 @@ end
     
     θ0 = π/3
     x = [sin(θ0), -cos(θ0), 0, 0, 0.1]
-    discrete_dynamics(x, 0, 0, 0)
+    @inferred discrete_dynamics(x, 0, 0, 0)
     
     X = [x]
     for i = 2:N
@@ -99,7 +99,7 @@ end
 
     θ0 = π/3
     x = [sin(θ0), -cos(θ0), 0, 0, 0.1]
-    discrete_dynamics(x, 0, 0, 0)
+    @inferred discrete_dynamics(x, 0, 0, 0)
     
     X = [x]
     for i = 2:N
@@ -122,6 +122,10 @@ end
     x = SA[1.0, 2.0, 3.0, 4.0]
     u = SA[1.0]
 
+    @inferred discrete_dynamics(x, u, 0, 0)
+    @inferred discrete_dynamics_implicit(x, u, 0, 0)
+    @inferred discrete_dynamics_rk(x, u, 0, 0)
+    @inferred discrete_dynamics_rk_ss(x, u, 0, 0)
 
     x1 = discrete_dynamics(x, u, 0, 0)
     x2 = discrete_dynamics_implicit(x, u, 0, 0)
