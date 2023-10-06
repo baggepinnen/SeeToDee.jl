@@ -78,7 +78,7 @@ function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=inte
     f4 = f(xi, u, p, t + Ts2)
     xi .= (Ts2 / 6) .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
-    y = x + xi
+    y = _mutable(x + xi) # If x is non-static but xi isn't, we get a static array and adding to y won't work
     for i in 2:supersample
         f1 = f(y, u, p, t)
         xi = y .+ (Ts2 / 2) .* f1
@@ -93,6 +93,8 @@ function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=inte
     return y
 end
 
+_mutable(x::StaticArray) = Array(x)
+_mutable(x::AbstractArray) = x
 
 # ==============================================================================
 
