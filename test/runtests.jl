@@ -127,6 +127,9 @@ end
     @inferred discrete_dynamics_rk(x, u, 0, 0)
     @inferred discrete_dynamics_rk_ss(x, u, 0, 0)
 
+    # Test that the Static version is used despite input x being a normal vector
+    @test discrete_dynamics_rk(Vector(x), u, 0, 0) isa SVector{4, Float64}
+
     x1 = discrete_dynamics(x, u, 0, 0)
     x2 = discrete_dynamics_implicit(x, u, 0, 0)
     x3 = discrete_dynamics_rk(x, u, 0, 0)
