@@ -2,7 +2,7 @@ using SeeToDee
 using Test
 using StaticArrays
 using ForwardDiff
-using NonlinearSolve
+# using NonlinearSolve
 using FastGaussQuadrature
 
 # This has to be defined outside of the testset
@@ -217,3 +217,61 @@ end
 # scatter!(ns, err_r, label="Gauss-Radau")
 # hline!([norm(xa-xrk)], lab="RK4")
 # display(current())
+
+
+
+# Robertsons
+
+# using StaticArrays
+# function rob(x, u, p, t)
+#     SA[
+#         - 0.04x[1] + 1e4x[2] * x[3]
+#         0.04x[1] - 1e4x[2] * x[3] - 3e7x[2]^2
+#         3e7x[2]^2
+#     ]
+# end
+
+# ##
+# x0 = SA[
+#     1.0, 1e-6, 1e-6
+# ]
+
+# X = [x0]
+# T = [Ts]
+# x = x0
+
+
+# function sim(x, X, T)
+#     Ts = 1e-5
+#     drob = SeeToDee.SimpleColloc(rob, Ts, 3, 0, 0; n=5)
+#     t = Ts
+#     for i = 1:10000
+#         x = drob(x, 0, 0, 0)
+#         t += Ts
+#         push!(X, x)
+#         push!(T, t)
+#     end
+
+#     Ts = 1e-3
+#     drob = SeeToDee.SimpleColloc(rob, Ts, 3, 0, 0; n=5)
+#     for i = 1:10000
+#         x = drob(x, 0, 0, 0)
+#         t += Ts
+#         push!(X, x)
+#         push!(T, t)
+#     end
+
+#     Ts = 1e-0
+#     drob = SeeToDee.SimpleColloc(rob, Ts, 3, 0, 0; n=5)
+#     for i = 1:100000
+#         x = drob(x, 0, 0, 0)
+#         t += Ts
+#         push!(X, x)
+#         push!(T, t)
+#     end
+# end
+# sim(x, X, T)
+
+# Xm = reduce(hcat, X)'
+# using Plots
+# plot(T, Xm, layout=(3, 1), xscale=:log10, legend=false, xlabel="Time", ylabel="Concentration", title=["A" "B" "C"])

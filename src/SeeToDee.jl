@@ -1,6 +1,6 @@
 module SeeToDee
 
-using FastGaussQuadrature, NonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
+using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
 
 export SimpleColloc
 
@@ -148,7 +148,7 @@ end
 
 
 """
-    SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=NewtonRaphson(), residual=false)
+    SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
 
 A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`SeeToDee.Rk4`](@ref).
 
@@ -162,6 +162,9 @@ When using this interface, the dynamics is called using an additional input `ẋ
 
 
 A Gauss-Radau collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
+
+!!! Info "Differentiation"
+    For fast automatic differentiation, through this solver, use `solver=NonlinearSolve.NewtonRaphson()` instead of the default `solver=SimpleNonlinearSolve.SimpleNewtonRaphson()`
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)
@@ -178,7 +181,7 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
 - To use trapezoidal integration, set `n=2` and `nodetype=SeeToDee.FastGaussQuadrature.gausslobatto`.
 """
-function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, solver=NewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
+function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
     T = float(T0)
     D, τ = diffoperator(n, Ts, nodetype)
     cv = zeros(T, (nx+na)*n)
