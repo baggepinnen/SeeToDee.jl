@@ -12,10 +12,10 @@ SimpleNonlinearSolve = "727e6d20-b764-4bd8-a329-72de5adea6c7"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-FastGaussQuadrature = "0.5"
+FastGaussQuadrature = "0.5, 1"
 ForwardDiff = "0.10"
-SimpleNonlinearSolve = "0.1"
 PreallocationTools = "0.4"
+SimpleNonlinearSolve = "0.1"
 StaticArrays = "1"
 julia = "1.9"
 
