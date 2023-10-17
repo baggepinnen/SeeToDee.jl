@@ -127,11 +127,12 @@ function diffoperator(n, Ts::T, ::typeof(gaussradau) = gaussradau) where T
     T.((A/B) ./ Ts), T.(τ), w
 end
 
-struct SimpleColloc{F,T,DT,TP,CT,NP,S}
+struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S}
     dyn::F
     Ts::T
     nx::Int
-    na::Int
+    x_inds::X
+    a_inds::A
     nu::Int
     D::DT
     τ::TP
@@ -149,10 +150,15 @@ end
 
 """
     SimpleColloc(dyn, Ts, nx, na, nu; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
+    SimpleColloc(dyn, Ts, x_inds, a_inds, nu; n = 5, abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
 
 A simple direct-collocation integrator that can be stepped manually, similar to the function returned by [`SeeToDee.Rk4`](@ref).
 
-This integrator supports differential-algebraic equations (DAE), the dynamics is expected to be on the form `(xz,u,p,t)->[ẋ; res]` where `xz` is a vector `[x; z]` contaning the differential state `x` and the algebraic variables `z` in this order. `res` is the algebraic residuals, and `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit). The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
+This integrator supports differential-algebraic equations (DAE), the dynamics is expected to be on either of the forms 
+- `nx,na` provided: `(xz,u,p,t)->[ẋ; res]` where `xz` is a vector `[x; z]` contaning the differential state `x` and the algebraic variables `z` in this order. `res` is the algebraic residuals, and `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit).
+- `x_inds, a_inds` provided: `(xz,u,p,t)->xzd` where `xzd[x_inds] = ẋ` and `xzd[a_inds] = res`.
+
+The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
 
 This integrator also supports a fully implicit form of the dynamics
 ```math
@@ -164,13 +170,14 @@ When using this interface, the dynamics is called using an additional input `ẋ
 A Gauss-Radau collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
 
 !!! Info "Differentiation"
-    For fast automatic differentiation, through this solver, use `solver=NonlinearSolve.NewtonRaphson()` instead of the default `solver=SimpleNonlinearSolve.SimpleNewtonRaphson()`
+    For fast automatic differentiation through this solver, use `solver=NonlinearSolve.NewtonRaphson()` instead of the default `solver=SimpleNonlinearSolve.SimpleNewtonRaphson()`
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)
 - `Ts`: Sample time
 - `nx`: Number of differential state variables
 - `na`: Number of algebraic variables
+- `x_inds, a_inds`: If indices are provided instead of `nx` and `na`, the mass matrix is assumed to be diagonal, with ones located at `x_inds` and zeros at `a_inds`.
 - `nu`: Number of inputs
 - `n`: Number of collocation points. `n=2` corresponds to trapezoidal integration.
 - `abstol`: Tolerance for the root finding algorithm
@@ -181,9 +188,17 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
 - To use trapezoidal integration, set `n=2` and `nodetype=SeeToDee.FastGaussQuadrature.gausslobatto`.
 """
-function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
+function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0 <: Real
+    x_inds = 1:nx
+    a_inds = nx+1:nx+na
+    SimpleColloc(dyn, Ts, x_inds, a_inds, args...; kwargs...)
+end
+
+function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
     T = float(T0)
     D, τ = diffoperator(n, Ts, nodetype)
+    nx = length(x_inds)
+    na = length(a_inds)
     cv = zeros(T, (nx+na)*n)
     x = zeros(T, nx+na, n)
     ẋ = zeros(T, nx+na, n)
@@ -191,19 +206,20 @@ function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, nu::Int; n=5, abstol=1e-8, 
 
     problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
 
-    SimpleColloc(dyn, Ts, nx, na, nu, T.(D), T.(τ), abstol, cache, problem, solver, residual)
+    SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ), abstol, cache, problem, solver, residual)
 end
 
 function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
-    (; dyn, nx, na, D, τ, residual) = integ
+    (; dyn, x_inds, a_inds, D, τ, residual) = integ
+    nx, na = length(x_inds), length(a_inds)
     cv, x_cache, ẋ, x = get_cache!(integ, xv)
     # x = reshape(xv, nx+na, :)#::Matrix{T} # Use cache of correct size instead to avoid allocations
     copyto!(x, xv) # Reshape but allocation free
 
     n_c = length(τ)
-    inds_c      = 1:nx
-    inds_x      = 1:nx
-    inds_alg    = nx+1:nx+na
+    inds_c      = x_inds
+    inds_x      = x_inds
+    inds_alg    = a_inds
 
     x_cache .= x .- x0
     # ẋ = reshape(cv, nx+na, n_c) # This renames cv to ẋ
@@ -231,7 +247,7 @@ function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
 end
 
 function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
-    (; nx, na) = integ
+    nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
     problem = SciMLBase.remake(integ.nlproblem, u0=vec(x0*ones(1, n_c)),p=(integ, x0, u, p, t))
     solution = solve(problem, integ.solver; abstol)
@@ -251,14 +267,18 @@ Given the differential state variables in `x0`, initialize the algebraic variabl
 function initialize(integ, x0, p, t=0.0; solver = integ.solver, abstol = integ.abstol)
     (; dyn, nx, na, nu) = integ
     u = zeros(nu)
-    diffinds = 1:nx
-    alginds = nx+1:nx+na
+    x0 = copy(x0)
+    diffinds = integ.x_inds
+    alginds = integ.a_inds
     res0 = dyn(x0, u, p, t)
     norm(res0[alginds]) < abstol && return x0
-    res = (z, _) -> dyn([x0[diffinds]; z], u, p, t)[alginds]
+    res = function (z, _)
+        x0[alginds] .= z
+        dyn(x0, u, p, t)[alginds]
+    end
     problem = NonlinearProblem(res, x0[alginds], p)
     solution = solve(problem, solver; abstol)
-    [x0[diffinds]; solution.u]
+    x0[alginds] .= solution.u
 end
 
 end
