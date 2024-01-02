@@ -143,7 +143,7 @@ struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S}
     residual::Bool
 end
 
-function get_cache!(integ::SimpleColloc, x::Array{T}) where T#::Tuple{Vector{T}, Matrix{T}, Matrix{T}, Matrix{T}} where T
+function get_cache!(integ::SimpleColloc, x::AbstractArray{T}) where T#::Tuple{Vector{T}, Matrix{T}, Matrix{T}, Matrix{T}} where T
     return get_tmp(integ.cache[1], x), get_tmp(integ.cache[2], x), get_tmp(integ.cache[3], x), get_tmp(integ.cache[4], x)
 end
 
@@ -177,7 +177,7 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - `Ts`: Sample time
 - `nx`: Number of differential state variables
 - `na`: Number of algebraic variables
-- `x_inds, a_inds`: If indices are provided instead of `nx` and `na`, the mass matrix is assumed to be diagonal, with ones located at `x_inds` and zeros at `a_inds`.
+- `x_inds, a_inds`: If indices are provided instead of `nx` and `na`, the mass matrix is assumed to be diagonal, with ones located at `x_inds` and zeros at `a_inds`. For maximum efficiency, provide these indices as unit ranges or static arrays.
 - `nu`: Number of inputs
 - `n`: Number of collocation points. `n=2` corresponds to trapezoidal integration.
 - `abstol`: Tolerance for the root finding algorithm
@@ -209,7 +209,7 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
     SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ), abstol, cache, problem, solver, residual)
 end
 
-function coldyn(xv::Array{T}, (integ, x0, u, p, t)) where T
+function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
     (; dyn, x_inds, a_inds, D, τ, residual) = integ
     nx, na = length(x_inds), length(a_inds)
     cv, x_cache, ẋ, x = get_cache!(integ, xv)
@@ -249,7 +249,13 @@ end
 function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
-    problem = SciMLBase.remake(integ.nlproblem, u0=vec(x0*ones(1, n_c)),p=(integ, x0, u, p, t))
+    _, _, _, u00 = get_cache!(integ, x0)
+    u0 = vec(u00)
+    nx0 = length(x0)
+    for i = 1:nx0, j = 1:n_c
+        u0[i + (j-1)*nx0] = x0[i]
+    end
+    problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t))
     solution = solve(problem, integ.solver; abstol)
     @views T(solution.u[end-nx-na+1:end])
 end
