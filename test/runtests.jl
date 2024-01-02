@@ -114,7 +114,7 @@ end
     # Cartpole
 
     n = 5
-    discrete_dynamics = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-10, residual=false)
+    discrete_dynamics = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-10, residual=false)#, solver=NonlinearSolve.NewtonRaphson())
     discrete_dynamics_implicit = SeeToDee.SimpleColloc(cartpole_implicit, Ts, 4, 0, 1; n, abstol=1e-10, residual=true)
     discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=3)
     discrete_dynamics_rk_ss = SeeToDee.Rk4(cartpole, Ts; supersample=200)
@@ -139,6 +139,7 @@ end
     @test x1 ≈ x3 atol=1e-2
     @test x1 ≈ x4 atol=1e-5
 
+    # using BenchmarkTools
     # @btime $discrete_dynamics($x, $u, 0, 0);
     # @btime $discrete_dynamics_implicit($x, $u, 0, 0); # Maybe a tiny improvement on this example
     # @btime $discrete_dynamics_rk($x, $u, 0, 0); # 200x faster
