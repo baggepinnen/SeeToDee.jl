@@ -14,8 +14,8 @@ ẋ = A\\, Δx + B\\, Δu
 Works for both continuous and discrete-time dynamics.
 """
 function linearize(f, x, u, args...)
-    A = ForwardDiff.jacobian(x->f(x, u, args...), x)
-    B = ForwardDiff.jacobian(u->f(x, u, args...), u)
+    A = ForwardDiff.jacobian(x->f(x, convert(typeof(x), u), args...), x)
+    B = ForwardDiff.jacobian(u->f(convert(typeof(u), x), u, args...), u)
     A, B
 end
 
@@ -169,8 +169,6 @@ When using this interface, the dynamics is called using an additional input `ẋ
 
 A Gauss-Radau collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
 
-!!! Info "Differentiation"
-    For fast automatic differentiation through this solver, use `solver=NonlinearSolve.NewtonRaphson()` instead of the default `solver=SimpleNonlinearSolve.SimpleNewtonRaphson()`
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)
@@ -246,7 +244,7 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
     cv
 end
 
-function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
+function (integ::SimpleColloc)(x0::T, u::T, p, t; abstol=integ.abstol)::T where T
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
     _, _, _, u00 = get_cache!(integ, x0)

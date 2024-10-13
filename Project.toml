@@ -1,7 +1,7 @@
 name = "SeeToDee"
 uuid = "1c904df7-48cd-41e7-921b-d889ed9a470c"
 authors = ["Fredrik Bagge Carlson"]
-version = "1.2.2"
+version = "1.2.3"
 
 [deps]
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
@@ -14,8 +14,8 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [compat]
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10"
-SimpleNonlinearSolve = "1"
 PreallocationTools = "0.4"
+SimpleNonlinearSolve = "1"
 StaticArrays = "1"
 julia = "1.9"
 

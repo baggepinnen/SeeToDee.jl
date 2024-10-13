@@ -92,7 +92,8 @@ end
     # Test that it's possible to differentiate through
     A = ForwardDiff.jacobian(x -> discrete_dynamics(x, 0, 0, 0), x)
     @test size(A) == (5, 5)
-
+    B = ForwardDiff.jacobian(u -> discrete_dynamics(x, u, 0, 0), [0.0])
+    @test size(B) == (5, 1)
 
     # Test residual formulation
     discrete_dynamics = SimpleColloc(cartesian_pendulum, Ts, 4, 1, 0; n, abstol=1e-7, residual=true, nodetype=gausslobatto)
