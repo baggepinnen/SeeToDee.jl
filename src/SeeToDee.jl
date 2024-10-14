@@ -15,7 +15,7 @@ Works for both continuous and discrete-time dynamics.
 """
 function linearize(f, x, u, args...)
     A = ForwardDiff.jacobian(x->f(x, u, args...), x)
-    B = ForwardDiff.jacobian(u->f(x, u, args...), u)
+    B = ForwardDiff.jacobian(u->f(convert(typeof(u), x), u, args...), u)
     A, B
 end
 
@@ -169,8 +169,6 @@ When using this interface, the dynamics is called using an additional input `ẋ
 
 A Gauss-Radau collocation method is used to discretize the dynamics. The resulting nonlinear problem is solved using (by default) a Newton-Raphson method. This method handles stiff dynamics.
 
-!!! Info "Differentiation"
-    For fast automatic differentiation through this solver, use `solver=NonlinearSolve.NewtonRaphson()` instead of the default `solver=SimpleNonlinearSolve.SimpleNewtonRaphson()`
 
 # Arguments:
 - `dyn`: Dynamics function (continuous time)

@@ -48,7 +48,7 @@ It's also common to want to do _more than just simulation_, for example, lineari
 ## Example
 The example below defines a dynamics function `cartpole` and then discretizes this using [`SeeToDee.Rk4`](@ref) and propagates the state forward one time step
 ```@example STEP
-using SeeToDee, NonlinearSolve, StaticArrays
+using SeeToDee, StaticArrays
 
 function cartpole(x, u, p, t)
     T = promote_type(eltype(x), eltype(u))
@@ -86,9 +86,8 @@ n  = 5 # Number of collocation points
 nx = 4 # Number of differential state variables
 na = 0 # Number of algebraic variables
 nu = 1 # Number of inputs
-solver = NonlinearSolve.NewtonRaphson()
 
-discrete_dynamics_colloc = SeeToDee.SimpleColloc(cartpole, Ts, nx, na, nu; n, abstol=1e-10, solver)
+discrete_dynamics_colloc = SeeToDee.SimpleColloc(cartpole, Ts, nx, na, nu; n, abstol=1e-10)
 x1_colloc = discrete_dynamics_colloc(x0, u0, p, 0)
 
 using Test
@@ -127,7 +126,7 @@ function cartpole_implicit(dx, x, u, p, _=0)
     return [qd; -Hqdd] - [dx[SA[1, 2]]; H*dx[SA[3, 4]]] # We multiply H here instead of inverting H like above
 end
 
-discrete_dynamics_implicit = SimpleColloc(cartpole_implicit, Ts, nx, na, nu; n, abstol=1e-10, residual=true, solver)
+discrete_dynamics_implicit = SimpleColloc(cartpole_implicit, Ts, nx, na, nu; n, abstol=1e-10, residual=true)
 
 x1_implicit = discrete_dynamics_implicit(x0, u0, p, 0)
 
