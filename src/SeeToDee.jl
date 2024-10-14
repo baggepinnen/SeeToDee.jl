@@ -14,7 +14,7 @@ ẋ = A\\, Δx + B\\, Δu
 Works for both continuous and discrete-time dynamics.
 """
 function linearize(f, x, u, args...)
-    A = ForwardDiff.jacobian(x->f(x, convert(typeof(x), u), args...), x)
+    A = ForwardDiff.jacobian(x->f(x, u, args...), x)
     B = ForwardDiff.jacobian(u->f(convert(typeof(u), x), u, args...), u)
     A, B
 end
@@ -244,7 +244,7 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
     cv
 end
 
-function (integ::SimpleColloc)(x0::T, u::T, p, t; abstol=integ.abstol)::T where T
+function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
     _, _, _, u00 = get_cache!(integ, x0)
