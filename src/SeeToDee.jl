@@ -255,12 +255,15 @@ function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     end
     problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t))
     solution = solve(problem, integ.solver; abstol)
+    if !SciMLBase.successful_retcode(solution)
+        @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10
+    end
     @views T(solution.u[end-nx-na+1:end])
 end
 
 
 """
-    initialize(integ, x0, p, t = 0.0; solver=integ.solver, abstol=integ.abstol)
+    initialize(integ, x0, u, p, t = 0.0; solver=integ.solver, abstol=integ.abstol)
 
 Given the differential state variables in `x0`, initialize the algebraic variables by solving the nonlinear problem `f(x,u,p,t) = 0` using the provided solver.
 
@@ -268,21 +271,24 @@ Given the differential state variables in `x0`, initialize the algebraic variabl
 - `integ`: An intergrator like [`SeeToDee.SimpleColloc`](@ref)
 - `x0`: Initial state descriptor (differential and algebraic variables, where the algebraic variables comes last)
 """
-function initialize(integ, x0, p, t=0.0; solver = integ.solver, abstol = integ.abstol)
-    (; dyn, nx, na, nu) = integ
-    u = zeros(nu)
+function initialize(integ, x0, u, p, t=0.0; solver = integ.solver, abstol = integ.abstol)
+    (; dyn, nx, nu) = integ
+    # u = zeros(nu)
     x0 = copy(x0)
     diffinds = integ.x_inds
     alginds = integ.a_inds
     res0 = dyn(x0, u, p, t)
     norm(res0[alginds]) < abstol && return x0
     res = function (z, _)
-        x0[alginds] .= z
-        dyn(x0, u, p, t)[alginds]
+        x0T = eltype(z).(x0)
+        x0T[alginds] .= z
+        dyn(x0T, u, p, t)[alginds]
     end
     problem = NonlinearProblem(res, x0[alginds], p)
     solution = solve(problem, solver; abstol)
     x0[alginds] .= solution.u
+    x0
 end
+
 
 end
