@@ -57,6 +57,7 @@ function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t; Ts=integ.Ts, supersam
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = x + add
     for i in 2:supersample
+        t += Ts2
         f1 = f(y, u, p, t)
         f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
         f3 = f(y + Ts2 / 2 * f2, u, p, t + Ts2 / 2)
@@ -80,6 +81,7 @@ function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=inte
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = _mutable(x + xi) # If x is non-static but xi isn't, we get a static array and adding to y won't work
     for i in 2:supersample
+        t += Ts2
         f1 = f(y, u, p, t)
         xi = y .+ (Ts2 / 2) .* f1
         f2 = f(xi, u, p, t + Ts2 / 2)
@@ -133,6 +135,7 @@ function _inner_rk3(integ::Rk3{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=inte
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = x + add
     for i in 2:supersample
+        t += Ts2
         f1 = f(y, u, p, t)
         f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
         f3 = f(y - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2)
@@ -180,6 +183,7 @@ function _inner_forwardeuler(integ::ForwardEuler{F}, f1, x, u, p, t; Ts=integ.Ts
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = x + add
     for i in 2:supersample
+        t += Ts2
         f2 = f(y, u, p, t)
         add = Ts2 .* f2
         y += add
@@ -223,6 +227,7 @@ function _inner_heun(integ::Heun{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=in
     add = (Ts2 / 2) .* (f1 .+ f2)
     y = x + add
     for i in 2:supersample
+        t += Ts2
         f1 = f(y, u, p, t)
         f2 = f(y .+ Ts2 .* f1, u, p, t + Ts2)
         add = (Ts2 / 2) .* (f1 .+ f2)
@@ -339,7 +344,7 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
 
     problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
 
-    SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ), abstol, cache, problem, solver, residual)
+    SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual)
 end
 
 function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T

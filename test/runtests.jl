@@ -169,6 +169,12 @@ end
         include("test_batch.jl")
     end
 
+
+    @testset "time" begin
+        @info "Testing time"
+        include("test_time.jl")
+    end
+
 end
 
 
