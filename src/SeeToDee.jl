@@ -97,6 +97,16 @@ _mutable(x::StaticArray) = Array(x)
 _mutable(x::AbstractArray) = x
 
 ## RK3 ==========================================================================
+"""
+    f_discrete = Rk3(f, Ts; supersample = 1)
+
+Discretize a continuous-time dynamics function `f` using RK3 with sample time `Tₛ`.
+`f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
+
+`supersample` determines the number of internal steps, 1 is often sufficient, but this can be increased to make the integration more accurate. `u` is assumed constant during all steps.
+
+If called with StaticArrays, this integrator is allocation free.
+"""
 struct Rk3{F,TS}
     f::F
     Ts::TS
@@ -141,7 +151,7 @@ end
 Discretize a continuous-time dynamics function `f` using forward Euler with sample time `Tₛ`. 
 `f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
 
-`supersample` determines the number of internal steps, 1 is often sufficient, but this can be increased to make the integration more accurate. `u` is assumed constant during all steps.
+`supersample` determines the number of internal steps, this can be increased to make the integration more accurate, but it might be favorable to choose a higher-order method instead. `u` is assumed constant during all steps.
 
 If called with StaticArrays, this integrator is allocation free.
 """
@@ -179,6 +189,17 @@ end
 
 
 ## Heun #######=================================================================
+
+"""
+    f_discrete = Heun(f, Ts; supersample = 1)
+
+Discretize a continuous-time dynamics function `f` using Heun's method with sample time `Tₛ`.
+`f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
+
+`supersample` determines the number of internal steps, this can be increased to make the integration more accurate, but it might be favorable to choose a higher-order method instead. `u` is assumed constant during all steps.
+
+If called with StaticArrays, this integrator is allocation free.
+"""
 struct Heun{F,TS}
     f::F
     Ts::TS
