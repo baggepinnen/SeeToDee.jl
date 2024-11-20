@@ -207,7 +207,8 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
     SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ), abstol, cache, problem, solver, residual)
 end
 
-function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
+function coldyn(xv::AbstractArray{T}, pstruct2) where T
+    (; integ, x0, u, p, t) = pstruct
     (; dyn, x_inds, a_inds, D, τ, residual) = integ
     nx, na = length(x_inds), length(a_inds)
     cv, x_cache, ẋ, x = get_cache!(integ, xv)
@@ -244,6 +245,18 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
     cv
 end
 
+struct PStruct2{I, X, U, P, T}
+    integ::I
+    x0::X
+    u::U
+    p::P
+    t::T
+end
+
+function SimpleNonlinearSolve.DiffEqBase.anyeltypedual(p::PStruct2, counter = 0)
+    SimpleNonlinearSolve.DiffEqBase.anyeltypedual((p.x0, p.u))
+end
+
 function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
@@ -253,7 +266,7 @@ function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     for i = 1:nx0, j = 1:n_c
         u0[i + (j-1)*nx0] = x0[i]
     end
-    problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t))
+    problem = SciMLBase.remake(integ.nlproblem, u0=u0, p=PStruct2(integ, x0, u, p, t))
     solution = solve(problem, integ.solver; abstol)
     if !SciMLBase.successful_retcode(solution)
         @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10
