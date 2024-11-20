@@ -25,7 +25,7 @@ end
 Discretize a continuous-time dynamics function `f` using RK4 with sample time `Tₛ`. 
 `f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
 
-`supersample` determins the number of internal steps, 1 is often sufficient, but this can be increased to make the interation more accurate. `u` is assumed constant during all steps.
+`supersample` determines the number of internal steps, 1 is often sufficient, but this can be increased to make the integration more accurate. `u` is assumed constant during all steps.
 
 If called with StaticArrays, this integrator is allocation free.
 """
@@ -96,7 +96,121 @@ end
 _mutable(x::StaticArray) = Array(x)
 _mutable(x::AbstractArray) = x
 
-# ==============================================================================
+## RK3 ==========================================================================
+struct Rk3{F,TS}
+    f::F
+    Ts::TS
+    supersample::Int
+    function Rk3(f::F, Ts; supersample::Integer = 1) where {F}
+        supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+        new{F, typeof(Ts / 1)}(f, Ts / 1, supersample) # Divide by one to floatify ints
+    end
+end
+
+
+function (integ::Rk3{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    f = integ.f
+    f1 = f(x, u, p, t)
+    _inner_rk3(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+end
+
+function _inner_rk3(integ::Rk3{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    Ts2 = Ts / supersample
+    f = integ.f
+    f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
+    f3 = f(x - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2)
+    add = Ts2 / 6 .* (f1 .+ 4 .* f2 .+ f3)
+    # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
+    y = x + add
+    for i in 2:supersample
+        f1 = f(y, u, p, t)
+        f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
+        f3 = f(y - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2)
+        add = Ts2 / 6 .* (f1 .+ 4 .* f2 .+ f3)
+        y += add
+    end
+    return y
+end
+
+
+
+## Forward Euler ===============================================================
+"""
+    f_discrete = ForwardEuler(f, Ts; supersample = 1)
+
+Discretize a continuous-time dynamics function `f` using forward Euler with sample time `Tₛ`. 
+`f` is assumed to have the signature `f : (x,u,p,t)->ẋ` and the returned function `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
+
+`supersample` determines the number of internal steps, 1 is often sufficient, but this can be increased to make the integration more accurate. `u` is assumed constant during all steps.
+
+If called with StaticArrays, this integrator is allocation free.
+"""
+struct ForwardEuler{F,TS}
+    f::F
+    Ts::TS
+    supersample::Int
+    function ForwardEuler(f::F, Ts; supersample::Integer = 1) where {F}
+        supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+        new{F, typeof(Ts / 1)}(f, Ts / 1, supersample) # Divide by one to floatify ints
+    end
+end
+
+
+function (integ::ForwardEuler{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    f = integ.f
+    f1 = f(x, u, p, t)
+    _inner_forwardeuler(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+end
+
+
+function _inner_forwardeuler(integ::ForwardEuler{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    Ts2 = Ts / supersample
+    f = integ.f
+    add = Ts2 .* f1
+    # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
+    y = x + add
+    for i in 2:supersample
+        f2 = f(y, u, p, t)
+        add = Ts2 .* f2
+        y += add
+    end
+    return y
+end
+
+
+## Heun #######=================================================================
+struct Heun{F,TS}
+    f::F
+    Ts::TS
+    supersample::Int
+    function Heun(f::F, Ts; supersample::Integer = 1) where {F}
+        supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+        new{F, typeof(Ts / 1)}(f, Ts / 1, supersample) # Divide by one to floatify ints
+    end
+end
+
+function (integ::Heun{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    f = integ.f
+    f1 = f(x, u, p, t)
+    _inner_heun(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+end
+
+function _inner_heun(integ::Heun{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+    Ts2 = Ts / supersample
+    f = integ.f
+    f2 = f(x + Ts2 * f1, u, p, t + Ts2)
+    add = (Ts2 / 2) .* (f1 .+ f2)
+    y = x + add
+    for i in 2:supersample
+        f1 = f(y, u, p, t)
+        f2 = f(y .+ Ts2 .* f1, u, p, t + Ts2)
+        add = (Ts2 / 2) .* (f1 .+ f2)
+        y += add
+    end
+    return y
+end
+
+## =============================================================================
 
 function simple_mul!(C, A, B)
     @inbounds @fastmath for m ∈ axes(A,1), n ∈ axes(B,2)
