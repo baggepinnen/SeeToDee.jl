@@ -4,6 +4,7 @@ using StaticArrays
 using ForwardDiff
 # using NonlinearSolve
 using FastGaussQuadrature
+using JET
 
 # This has to be defined outside of the testset
 function cartesian_pendulum(U, inp, p, t)
@@ -133,6 +134,21 @@ end
     @inferred discrete_dynamics_rk3(x, u, 0, 0)
     @inferred discrete_dynamics_fe(x, u, 0, 0)
     @inferred discrete_dynamics_heun(x, u, 0, 0)
+
+
+    # @test_opt discrete_dynamics(x, u, 0, 0.0)
+    # @test_opt discrete_dynamics_implicit(x, u, 0, 0.0)
+    @test_opt discrete_dynamics_rk(x, u, 0, 0.0)
+    @test_opt discrete_dynamics_rk_ss(x, u, 0, 0.0)
+    @test_opt discrete_dynamics_rk3(x, u, 0, 0.0)
+    @test_opt discrete_dynamics_fe(x, u, 0, 0.0)
+    @test_opt discrete_dynamics_heun(x, u, 0, 0.0)
+
+    # @report_call discrete_dynamics_rk(x, u, 0, 0)
+    # @report_call discrete_dynamics_rk_ss(x, u, 0, 0)
+    # @report_call discrete_dynamics_rk3(x, u, 0, 0)
+    # @report_call discrete_dynamics_fe(x, u, 0, 0)
+    # @report_call discrete_dynamics_heun(x, u, 0, 0)
 
     # Test that the Static version is used despite input x being a normal vector
     @test discrete_dynamics_rk(Vector(x), u, 0, 0) isa SVector{4, Float64}
