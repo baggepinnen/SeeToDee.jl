@@ -15,7 +15,11 @@ Works for both continuous and discrete-time dynamics.
 """
 function linearize(f, x, u, args...)
     A = ForwardDiff.jacobian(x->f(x, u, args...), x)
-    B = ForwardDiff.jacobian(u->f(convert(typeof(u), x), u, args...), u)
+    if u isa SVector
+        B = ForwardDiff.jacobian(u->f(x, u, args...), u)
+    else
+        B = ForwardDiff.jacobian(u->f(convert(typeof(u), x), u, args...), u)
+    end
     A, B
 end
 
@@ -40,55 +44,55 @@ struct Rk4{F,TS}
 end
 
 
-function (integ::Rk4{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function (integ::Rk4{F})(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
-    f1 = f(x, u, p, t)
-    _inner_rk4(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+    f1 = f(x, u, p, t, args...)
+    _inner_rk4(integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on return type of dynamics
 end
 
 
-function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
-    f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
-    f3 = f(x + Ts2 / 2 * f2, u, p, t + Ts2 / 2)
-    f4 = f(x + Ts2 * f3, u, p, t + Ts2)
+    f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2, args...)
+    f3 = f(x + Ts2 / 2 * f2, u, p, t + Ts2 / 2, args...)
+    f4 = f(x + Ts2 * f3, u, p, t + Ts2, args...)
     add = Ts2 / 6 .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = x + add
     for i in 2:supersample
         t += Ts2
-        f1 = f(y, u, p, t)
-        f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
-        f3 = f(y + Ts2 / 2 * f2, u, p, t + Ts2 / 2)
-        f4 = f(y + Ts2 * f3, u, p, t + Ts2)
+        f1 = f(y, u, p, t, args...)
+        f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2, args...)
+        f3 = f(y + Ts2 / 2 * f2, u, p, t + Ts2 / 2, args...)
+        f4 = f(y + Ts2 * f3, u, p, t + Ts2, args...)
         add = Ts2 / 6 .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
         y += add
     end
     return y
 end
 
-function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
     xi = x .+ (Ts2 / 2) .* f1
-    f2 = f(xi, u, p, t + Ts2 / 2)
+    f2 = f(xi, u, p, t + Ts2 / 2, args...)
     xi .= x .+ (Ts2 / 2) .* f2
-    f3 = f(xi, u, p, t + Ts2 / 2)
+    f3 = f(xi, u, p, t + Ts2 / 2, args...)
     xi .= x .+ Ts2 .* f3
-    f4 = f(xi, u, p, t + Ts2)
+    f4 = f(xi, u, p, t + Ts2, args...)
     xi .= (Ts2 / 6) .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = _mutable(x + xi) # If x is non-static but xi isn't, we get a static array and adding to y won't work
     for i in 2:supersample
         t += Ts2
-        f1 = f(y, u, p, t)
+        f1 = f(y, u, p, t, args...)
         xi = y .+ (Ts2 / 2) .* f1
-        f2 = f(xi, u, p, t + Ts2 / 2)
+        f2 = f(xi, u, p, t + Ts2 / 2, args...)
         xi .= y .+ (Ts2 / 2) .* f2
-        f3 = f(xi, u, p, t + Ts2 / 2)
+        f3 = f(xi, u, p, t + Ts2 / 2, args...)
         xi .= y .+ Ts2 .* f3
-        f4 = f(xi, u, p, t + Ts2)
+        f4 = f(xi, u, p, t + Ts2, args...)
         xi .= (Ts2 / 6) .* (f1 .+ 2 .* f2 .+ 2 .* f3 .+ f4)
         y .+= xi
     end
@@ -120,25 +124,25 @@ struct Rk3{F,TS}
 end
 
 
-function (integ::Rk3{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function (integ::Rk3{F})(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
-    f1 = f(x, u, p, t)
-    _inner_rk3(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+    f1 = f(x, u, p, t, args...)
+    _inner_rk3(integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on return type of dynamics
 end
 
-function _inner_rk3(integ::Rk3{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk3(integ::Rk3{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
-    f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
-    f3 = f(x - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2)
+    f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2, args...)
+    f3 = f(x - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2, args...)
     add = Ts2 / 6 .* (f1 .+ 4 .* f2 .+ f3)
     # This gymnastics with changing the name to y is to ensure type stability when x + add is not the same type as x. The compiler is smart enough to figure out the type of y
     y = x + add
     for i in 2:supersample
         t += Ts2
-        f1 = f(y, u, p, t)
-        f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2)
-        f3 = f(y - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2)
+        f1 = f(y, u, p, t, args...)
+        f2 = f(y + Ts2 / 2 * f1, u, p, t + Ts2 / 2, args...)
+        f3 = f(y - Ts2 * f1 .+ 2 * Ts2 * f2, u, p, t + Ts2, args...)
         add = Ts2 / 6 .* (f1 .+ 4 .* f2 .+ f3)
         y += add
     end
@@ -169,14 +173,14 @@ struct ForwardEuler{F,TS}
 end
 
 
-function (integ::ForwardEuler{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function (integ::ForwardEuler{F})(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
-    f1 = f(x, u, p, t)
-    _inner_forwardeuler(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+    f1 = f(x, u, p, t, args...)
+    _inner_forwardeuler(integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on return type of dynamics
 end
 
 
-function _inner_forwardeuler(integ::ForwardEuler{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_forwardeuler(integ::ForwardEuler{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
     add = Ts2 .* f1
@@ -184,7 +188,7 @@ function _inner_forwardeuler(integ::ForwardEuler{F}, f1, x, u, p, t; Ts=integ.Ts
     y = x + add
     for i in 2:supersample
         t += Ts2
-        f2 = f(y, u, p, t)
+        f2 = f(y, u, p, t, args...)
         add = Ts2 .* f2
         y += add
     end
@@ -214,22 +218,22 @@ struct Heun{F,TS}
     end
 end
 
-function (integ::Heun{F})(x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function (integ::Heun{F})(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
-    f1 = f(x, u, p, t)
-    _inner_heun(integ, f1, x, u, p, t; Ts, supersample) # Dispatch depending on return type of dynamics
+    f1 = f(x, u, p, t, args...)
+    _inner_heun(integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on return type of dynamics
 end
 
-function _inner_heun(integ::Heun{F}, f1, x, u, p, t; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_heun(integ::Heun{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
-    f2 = f(x + Ts2 * f1, u, p, t + Ts2)
+    f2 = f(x + Ts2 * f1, u, p, t + Ts2, args...)
     add = (Ts2 / 2) .* (f1 .+ f2)
     y = x + add
     for i in 2:supersample
         t += Ts2
-        f1 = f(y, u, p, t)
-        f2 = f(y .+ Ts2 .* f1, u, p, t + Ts2)
+        f1 = f(y, u, p, t, args...)
+        f2 = f(y .+ Ts2 .* f1, u, p, t + Ts2, args...)
         add = (Ts2 / 2) .* (f1 .+ f2)
         y += add
     end
@@ -347,7 +351,7 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
     SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual)
 end
 
-function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
+function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
     (; dyn, x_inds, a_inds, D, τ, residual) = integ
     nx, na = length(x_inds), length(a_inds)
     cv, x_cache, ẋ, x = get_cache!(integ, xv)
@@ -367,13 +371,13 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
     if residual
         allinds = 1:(nx+na)
         @views for k in 1:n_c
-            res          = dyn(ẋ[:,k], x[:,k], u, p, t+τ[k])
+            res          = dyn(ẋ[:,k], x[:,k], u, p, t+τ[k], args...)
             cv[allinds] .= res
             allinds      = allinds .+ (nx+na)
         end
     else
         @views for k in 1:n_c
-            temp_dyn      = dyn(x[:,k], u, p, t+τ[k])
+            temp_dyn      = dyn(x[:,k], u, p, t+τ[k], args...)
             cv[inds_c]  .-= temp_dyn[inds_x]
             inds_c        = inds_c .+ (nx+na)
 
@@ -384,7 +388,7 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t)) where T
     cv
 end
 
-function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
+function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol)::T where T
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
     _, _, _, u00 = get_cache!(integ, x0)
@@ -393,7 +397,7 @@ function (integ::SimpleColloc)(x0::T, u, p, t; abstol=integ.abstol)::T where T
     for i = 1:nx0, j = 1:n_c
         u0[i + (j-1)*nx0] = x0[i]
     end
-    problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t))
+    problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t, args...))
     solution = solve(problem, integ.solver; abstol)
     if !SciMLBase.successful_retcode(solution)
         @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10
@@ -411,18 +415,18 @@ Given the differential state variables in `x0`, initialize the algebraic variabl
 - `integ`: An intergrator like [`SeeToDee.SimpleColloc`](@ref)
 - `x0`: Initial state descriptor (differential and algebraic variables, where the algebraic variables comes last)
 """
-function initialize(integ, x0, u, p, t=0.0; solver = integ.solver, abstol = integ.abstol)
+function initialize(integ, x0, u, p, t=0.0, args...; solver = integ.solver, abstol = integ.abstol)
     (; dyn, nx, nu) = integ
     # u = zeros(nu)
     x0 = copy(x0)
     diffinds = integ.x_inds
     alginds = integ.a_inds
-    res0 = dyn(x0, u, p, t)
+    res0 = dyn(x0, u, p, t, args...)
     norm(res0[alginds]) < abstol && return x0
     res = function (z, _)
         x0T = eltype(z).(x0)
         x0T[alginds] .= z
-        dyn(x0T, u, p, t)[alginds]
+        dyn(x0T, u, p, t, args...)[alginds]
     end
     problem = NonlinearProblem(res, x0[alginds], p)
     solution = solve(problem, solver; abstol)
