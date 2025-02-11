@@ -123,6 +123,7 @@ end
     discrete_dynamics_rk3 = SeeToDee.Rk3(cartpole, Ts; supersample=3)
     discrete_dynamics_fe = SeeToDee.ForwardEuler(cartpole, Ts; supersample=3)
     discrete_dynamics_heun = SeeToDee.Heun(cartpole, Ts; supersample=3)
+    discrete_dynamics_trapz = SeeToDee.Trapezoidal(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false)
 
     x = SA[1.0, 2.0, 3.0, 4.0]
     u = SA[1.0]
@@ -134,6 +135,7 @@ end
     @inferred discrete_dynamics_rk3(x, u, 0, 0)
     @inferred discrete_dynamics_fe(x, u, 0, 0)
     @inferred discrete_dynamics_heun(x, u, 0, 0)
+    @inferred discrete_dynamics_trapz(x, u, 0, 0)
 
 
     # @test_opt discrete_dynamics(x, u, 0, 0.0)
@@ -143,6 +145,7 @@ end
     @test_opt discrete_dynamics_rk3(x, u, 0, 0.0)
     @test_opt discrete_dynamics_fe(x, u, 0, 0.0)
     @test_opt discrete_dynamics_heun(x, u, 0, 0.0)
+
 
     # @report_call discrete_dynamics_rk(x, u, 0, 0)
     # @report_call discrete_dynamics_rk_ss(x, u, 0, 0)
@@ -155,6 +158,7 @@ end
     @test discrete_dynamics_rk3(Vector(x), u, 0, 0) isa SVector{4, Float64}
     @test discrete_dynamics_fe(Vector(x), u, 0, 0) isa SVector{4, Float64}
     @test discrete_dynamics_heun(Vector(x), u, 0, 0) isa SVector{4, Float64}
+    # @test discrete_dynamics_trapz(Vector(x), u, 0, 0) isa SVector{4, Float64}
 
     x1 = discrete_dynamics(x, u, 0, 0)
     x2 = discrete_dynamics_implicit(x, u, 0, 0)
@@ -163,6 +167,7 @@ end
     x5 = discrete_dynamics_rk3(x, u, 0, 0)
     x6 = discrete_dynamics_fe(x, u, 0, 0)
     x7 = discrete_dynamics_heun(x, u, 0, 0)
+    x8 = discrete_dynamics_trapz(x, u, 0, 0)
 
     @test x1 ≈ x2 atol=1e-9
     @test x1 ≈ x3 atol=1e-2
@@ -170,6 +175,7 @@ end
     @test x1 ≈ x5 atol=1e-2
     @test x1 ≈ x6 rtol=5e-2
     @test x1 ≈ x7 rtol=4e-2
+    @test x1 ≈ x8 rtol=5e-2
 
     # using BenchmarkTools
     # @btime $discrete_dynamics($x, $u, 0, 0);

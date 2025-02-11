@@ -13,6 +13,7 @@ SeeToDee.Rk3
 SeeToDee.Heun
 SeeToDee.ForwardEuler
 SeeToDee.SimpleColloc
+SeeToDee.Trapezoidal
 ```
 ### Utilities
 ```@docs

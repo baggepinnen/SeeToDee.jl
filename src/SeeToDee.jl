@@ -3,6 +3,9 @@ module SeeToDee
 using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
 
 export SimpleColloc
+# public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal
+
+
 
 """
     A,B = linearize(f, x0, u0, p, t)
@@ -328,7 +331,6 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 
 # Extended help
 - Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
-- To use trapezoidal integration, set `n=2` and `nodetype=SeeToDee.FastGaussQuadrature.gausslobatto`.
 """
 function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0 <: Real
     x_inds = 1:nx
@@ -432,6 +434,112 @@ function initialize(integ, x0, u, p, t=0.0, args...; solver = integ.solver, abst
     solution = solve(problem, solver; abstol)
     x0[alginds] .= solution.u
     x0
+end
+
+
+## =============================================================================
+
+struct Trapezoidal{F,T,X,A,NP,S}
+    dyn::F
+    Ts::T
+    nx::Int
+    x_inds::X
+    a_inds::A
+    nu::Int
+    abstol::Float64
+    nlproblem::NP
+    solver::S
+    residual::Bool
+end
+
+
+"""
+    Trapezoidal(dyn, Ts, nx, na, nu; abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
+    Trapezoidal(dyn, Ts, x_inds, a_inds, nu; abstol = 1.0e-8, solver=SimpleNewtonRaphson(), residual=false)
+
+A simple trapezoidal integrator that can be stepped manually, similar to the function returned by [`SeeToDee.Rk4`](@ref).
+
+This integrator supports differential-algebraic equations (DAE), the dynamics is expected to be on either of the forms 
+- `nx,na` provided: `(xz,u,p,t)->[ẋ; res]` where `xz` is a vector `[x; z]` contaning the differential state `x` and the algebraic variables `z` in this order. `res` is the algebraic residuals, and `u` is the control input. The algebraic residuals are thus assumed to be the last `na` elements of of the arrays returned by the dynamics (the convention used by ModelingToolkit).
+- `x_inds, a_inds` provided: `(xz,u,p,t)->xzd` where `xzd[x_inds] = ẋ` and `xzd[a_inds] = res`.
+
+The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`. 
+
+# Arguments:
+- `dyn`: Dynamics function (continuous time)
+- `Ts`: Sample time
+- `nx`: Number of differential state variables
+- `na`: Number of algebraic variables
+- `x_inds, a_inds`: If indices are provided instead of `nx` and `na`, the mass matrix is assumed to be diagonal, with ones located at `x_inds` and zeros at `a_inds`. For maximum efficiency, provide these indices as unit ranges or static arrays.
+- `nu`: Number of inputs
+- `abstol`: Tolerance for the root finding algorithm
+- `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
+- `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
+
+# Extended help
+- Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
+"""
+function Trapezoidal(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0 <: Real
+    x_inds = 1:nx
+    a_inds = nx+1:nx+na
+    Trapezoidal(dyn, Ts, x_inds, a_inds, args...; kwargs...)
+end
+
+function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false) where T0 <: Real
+    T = float(T0)
+    nx = length(x_inds)
+    na = length(a_inds)
+    x = zeros(T, nx+na)
+
+    problem = NonlinearProblem(coldyn_trapz,x,SciMLBase.NullParameters())
+
+    Trapezoidal(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual)
+end
+
+function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
+    (; dyn, x_inds, a_inds, residual, Ts) = integ
+
+    x1 = x isa MVector ? SVector(x) : x
+
+    if residual
+        error("Not yet implemented")
+        # allinds = 1:(nx+na)
+        # res          = dyn(ẋ[:,k], x[:,k], u, p, t+τ[k], args...)
+        # res[allinds] .= res
+    else
+        f0 = dyn(x0, u, p, t,    args...)
+        f1 = dyn(x1,  u, p, t+Ts, args...)
+        if isempty(a_inds)
+            res .= x0 .- x1 .+ (Ts/2) .* (f0 .+ f1)
+        else
+            @views res[x_inds]  .= x0[x_inds] .- x1[x_inds] .+ (Ts/2) .* (f0[x_inds] .+ f1[x_inds])
+            @views res[a_inds] .=  f1[a_inds]
+        end
+    end
+    res
+end
+
+# function coldyn_trapz(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
+#     (; dyn, x_inds, a_inds, Ts) = integ
+
+
+#     f0 = dyn(x0, u, p, t,    args...)
+#     f1 = dyn(x,  u, p, t+Ts, args...)
+#     if isempty(a_inds)
+#         return x0 .- x .+ (Ts/2) .* (f0 .+ f1)
+#     else
+#         return [x0[x_inds] .- x[x_inds] .+ (Ts/2) .* (f0[x_inds] .+ f1[x_inds])
+#                 f1[a_inds]]
+#     end
+# end
+
+function (integ::Trapezoidal)(x0::T, u, p, t, args...; abstol=integ.abstol)::T where T
+    problem = SciMLBase.remake(integ.nlproblem, u0=x0, p=(integ, x0, u, p, t, args...))
+    solution = solve(problem, integ.solver; abstol)
+    if !SciMLBase.successful_retcode(solution)
+        @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10
+    end
+    T(solution.u)
 end
 
 
