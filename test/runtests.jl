@@ -197,6 +197,90 @@ end
         include("test_time.jl")
     end
 
+    @testset "AdaptiveStep" begin
+        @info "Testing AdaptiveStep"
+        
+        # Test with explicit integrators (these support supersample and Ts keywords)
+        Ts_base = 0.1
+        discrete_rk4 = SeeToDee.Rk4(cartpole, Ts_base; supersample=2)
+        discrete_rk3 = SeeToDee.Rk3(cartpole, Ts_base; supersample=2)
+        discrete_fe = SeeToDee.ForwardEuler(cartpole, Ts_base; supersample=2)
+        discrete_heun = SeeToDee.Heun(cartpole, Ts_base; supersample=2)
+        
+        # Create adaptive wrappers
+        adaptive_rk4 = SeeToDee.AdaptiveStep(discrete_rk4)
+        adaptive_rk3 = SeeToDee.AdaptiveStep(discrete_rk3)
+        adaptive_fe = SeeToDee.AdaptiveStep(discrete_fe)
+        adaptive_heun = SeeToDee.AdaptiveStep(discrete_heun)
+        
+        x = SA[1.0, 2.0, 3.0, 4.0]
+        u = SA[1.0]
+        
+        # Test that AdaptiveStep correctly calculates largest_Ts
+        @test adaptive_rk4.largest_Ts ≈ Ts_base / 2  # Since supersample=2
+        @test adaptive_rk3.largest_Ts ≈ Ts_base / 2
+        @test adaptive_fe.largest_Ts ≈ Ts_base / 2
+        @test adaptive_heun.largest_Ts ≈ Ts_base / 2
+        
+        # Test that base step size works identically
+        @test adaptive_rk4(x, u, 0, 0; Ts=Ts_base) ≈ discrete_rk4(x, u, 0, 0; Ts=Ts_base)
+        @test adaptive_rk3(x, u, 0, 0; Ts=Ts_base) ≈ discrete_rk3(x, u, 0, 0; Ts=Ts_base)
+        @test adaptive_fe(x, u, 0, 0; Ts=Ts_base) ≈ discrete_fe(x, u, 0, 0; Ts=Ts_base)
+        @test adaptive_heun(x, u, 0, 0; Ts=Ts_base) ≈ discrete_heun(x, u, 0, 0; Ts=Ts_base)
+        
+        # Test with larger step sizes (should use supersample internally)
+        Ts_large = 0.4  # 8x larger than largest_Ts (0.05)
+        
+        # Test that larger steps work (using internal supersample mechanism)
+        x_adaptive_rk4 = adaptive_rk4(x, u, 0, 0; Ts=Ts_large)
+        x_adaptive_rk3 = adaptive_rk3(x, u, 0, 0; Ts=Ts_large)
+        x_adaptive_fe = adaptive_fe(x, u, 0, 0; Ts=Ts_large)
+        x_adaptive_heun = adaptive_heun(x, u, 0, 0; Ts=Ts_large)
+        
+        @test x_adaptive_rk4 isa SVector{4, Float64}
+        @test x_adaptive_rk3 isa SVector{4, Float64}
+        @test x_adaptive_fe isa SVector{4, Float64}
+        @test x_adaptive_heun isa SVector{4, Float64}
+        
+        # Test with smaller step sizes (should work without subdivision)
+        Ts_small = 0.05  # Equal to largest_Ts
+        @test adaptive_rk4(x, u, 0, 0; Ts=Ts_small) ≈ discrete_rk4(x, u, 0, 0; Ts=Ts_small, supersample=1)
+        @test adaptive_rk3(x, u, 0, 0; Ts=Ts_small) ≈ discrete_rk3(x, u, 0, 0; Ts=Ts_small, supersample=1)
+        
+        # Test type inference
+        @inferred adaptive_rk4(x, u, 0, 0; Ts=Ts_base)
+        @inferred adaptive_rk3(x, u, 0, 0; Ts=Ts_base)
+        @inferred adaptive_fe(x, u, 0, 0; Ts=Ts_base)
+        @inferred adaptive_heun(x, u, 0, 0; Ts=Ts_base)
+        
+        # Test with very large step sizes
+        Ts_verylarge = 1.0  # 20x larger than largest_Ts
+        x_verylarge = adaptive_rk4(x, u, 0, 0; Ts=Ts_verylarge)
+        @test x_verylarge isa SVector{4, Float64}
+        
+        # Test edge case: exactly matching largest_Ts
+        @test adaptive_rk4(x, u, 0, 0; Ts=adaptive_rk4.largest_Ts) ≈ discrete_rk4(x, u, 0, 0; Ts=adaptive_rk4.largest_Ts, supersample=1)
+        
+        # Test with different supersample in base integrator
+        discrete_rk4_ss = SeeToDee.Rk4(cartpole, 0.2; supersample=5)
+        adaptive_rk4_ss = SeeToDee.AdaptiveStep(discrete_rk4_ss)
+        @test adaptive_rk4_ss.largest_Ts ≈ 0.04  # 0.2/5
+        
+        # Test large step with supersampled base integrator
+        result_ss = adaptive_rk4_ss(x, u, 0, 0; Ts=0.8)  # Should use supersample=20
+        @test result_ss isa SVector{4, Float64}
+        
+        # Test that AdaptiveStep works correctly when Ts > largest_Ts
+        # For a step that requires supersample=10 (0.4/0.04 = 10)
+        result_large = adaptive_rk4_ss(x, u, 0, 0; Ts=0.4)
+        @test result_large isa SVector{4, Float64}
+        
+        # Test consistency: same result for equivalent calls
+        x1 = adaptive_rk4(x, u, 0, 0; Ts=0.2)  # Uses supersample=4
+        x2 = discrete_rk4(x, u, 0, 0; Ts=0.2, supersample=4)
+        @test x1 ≈ x2
+    end
+
 end
 
 
