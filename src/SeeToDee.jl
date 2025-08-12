@@ -2,7 +2,7 @@ module SeeToDee
 
 using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
 
-export SimpleColloc
+export SimpleColloc, AdaptiveStep
 # public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal
 
 
@@ -24,6 +24,91 @@ function linearize(f, x, u, args...)
         B = ForwardDiff.jacobian(u->f(convert(typeof(u), x), u, args...), u)
     end
     A, B
+end
+
+"""
+    AdaptiveStep(integrator)
+
+A wrapper that enables automatic step subdivision for taking arbitrary-length steps with any integrator.
+
+When the requested step size `Ts` is larger than the integrator's effective step size (`largest_Ts`), 
+`AdaptiveStep` automatically subdivides the step using the integrator's internal supersample mechanism 
+(for explicit integrators) or manual stepping (for implicit integrators).
+
+# Fields
+- `integ`: The wrapped integrator
+- `largest_Ts`: The largest step size the integrator can take in a single call (`Ts / supersample`)
+
+# Usage
+```julia
+# Wrap any integrator to enable automatic step subdivision
+base_integrator = Rk4(dynamics, 0.1; supersample=2)  # largest_Ts = 0.05
+adaptive_integrator = AdaptiveStep(base_integrator)
+
+# Take arbitrary step sizes - automatically subdivides when needed
+x_next = adaptive_integrator(x, u, p, t; Ts=0.3)  # Uses supersample=6 internally
+```
+
+# Notes
+- This wrapper does NOT use error control - it only ensures step sizes never exceed `largest_Ts`
+- For explicit integrators (`Rk4`, `Rk3`, `ForwardEuler`, `Heun`), uses built-in supersample mechanism
+- For implicit integrators (`SimpleColloc`, `Trapezoidal`), performs manual step subdivision
+- When `Ts ≤ largest_Ts`, calls the integrator directly without subdivision
+
+# Examples
+```julia
+using SeeToDee, StaticArrays
+
+# Define dynamics
+function simple_dynamics(x, u, p, t)
+    return -x + u
+end
+
+# Create base integrator with supersample=3
+base = SeeToDee.Rk4(simple_dynamics, 0.1; supersample=3)  # largest_Ts = 0.1/3 ≈ 0.033
+
+# Wrap with AdaptiveStep
+adaptive = SeeToDee.AdaptiveStep(base)
+
+x0 = SA[1.0]
+u = SA[0.5]
+
+# Small step - no subdivision needed
+x1 = adaptive(x0, u, 0, 0; Ts=0.02)  # Direct call
+
+# Large step - automatic subdivision
+x2 = adaptive(x0, u, 0, 0; Ts=0.5)   # Uses supersample=15 internally
+```
+"""
+struct AdaptiveStep{I,T}
+    integ::I
+    largest_Ts::T
+end
+
+AdaptiveStep(integ) = AdaptiveStep(integ, integ.Ts/(hasproperty(integ, :supersample) ? integ.supersample : 1.0))
+
+function (as::AdaptiveStep)(x, u, p, t, args...; Ts=as.integ.Ts, kwargs...)
+    if Ts > as.largest_Ts
+        supersample = ceil(Int, Ts / as.largest_Ts)
+        if hasproperty(as.integ, :supersample)
+            # In this case we turn supersampling off, since this is already taken into account in the largest Ts
+            return as.integ(x, u, p, t, args...; Ts, supersample, kwargs...)
+        else
+            new_Ts = as.largest_Ts / supersample
+            for i in 1:supersample-1
+                x = as.integ(x, u, p, t, args...; Ts=new_Ts, kwargs...)
+                t += new_Ts
+            end
+            return x
+        end
+    else
+        if hasproperty(as.integ, :supersample)
+            # In this case we turn supersampling off, since this is already taken into account in the largest Ts
+            return as.integ(x, u, p, t, args...; Ts, supersample=1, kwargs...)
+        else
+            return as.integ(x, u, p, t, args...; Ts, kwargs...)
+        end
+    end
 end
 
 """
@@ -485,13 +570,17 @@ function Trapezoidal(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0
     Trapezoidal(dyn, Ts, x_inds, a_inds, args...; kwargs...)
 end
 
-function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false) where T0 <: Real
+function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, inplace=true) where T0 <: Real
     T = float(T0)
     nx = length(x_inds)
     na = length(a_inds)
-    x = zeros(T, nx+na)
+    x = SVector(zeros(T, nx+na)...)
 
-    problem = NonlinearProblem(coldyn_trapz,x,SciMLBase.NullParameters())
+    if inplace
+        problem = NonlinearProblem(coldyn_trapz,x,SciMLBase.NullParameters())
+    else
+        problem = NonlinearProblem(coldyn_trapz_oop,x,SciMLBase.NullParameters())
+    end
 
     Trapezoidal(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual)
 end
@@ -508,7 +597,7 @@ function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) w
         # res[allinds] .= res
     else
         f0 = dyn(x0, u, p, t,    args...)
-        f1 = dyn(x1,  u, p, t+Ts, args...)
+        f1 = dyn(x1, u, p, t+Ts, args...)
         if isempty(a_inds)
             res .= x0 .- x1 .+ (Ts/2) .* (f0 .+ f1)
         else
@@ -519,22 +608,33 @@ function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) w
     res
 end
 
-# function coldyn_trapz(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
-#     (; dyn, x_inds, a_inds, Ts) = integ
+function coldyn_trapz_oop(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
+    (; dyn, x_inds, a_inds, Ts) = integ
 
 
-#     f0 = dyn(x0, u, p, t,    args...)
-#     f1 = dyn(x,  u, p, t+Ts, args...)
-#     if isempty(a_inds)
-#         return x0 .- x .+ (Ts/2) .* (f0 .+ f1)
-#     else
-#         return [x0[x_inds] .- x[x_inds] .+ (Ts/2) .* (f0[x_inds] .+ f1[x_inds])
-#                 f1[a_inds]]
-#     end
-# end
+    f0 = dyn(x0, u, p, t,    args...)
+    f1 = dyn(x,  u, p, t+Ts, args...)
+    if isempty(a_inds)
+        return x0 .- x .+ (Ts/2) .* (f0 .+ f1)
+    else
+        res = [x0[x_inds] .- x[x_inds] .+ (Ts/2) .* (f0[x_inds] .+ f1[x_inds])
+        f1[a_inds]]
+        if x isa Union{SVector, MVector} && !(res isa SVector)
+            return SVector{length(x)}(res)
+        else
+            return res
+        end
+    end
+end
 
 function (integ::Trapezoidal)(x0::T, u, p, t, args...; abstol=integ.abstol)::T where T
     problem = SciMLBase.remake(integ.nlproblem, u0=x0, p=(integ, x0, u, p, t, args...))
+    # integ.nlproblem = problem
+    # problem.u0 .= x0
+    # problem.p[2] .= x0
+    # problem.p[3] .= u
+    # problem.p[6] .= d
+
     solution = solve(problem, integ.solver; abstol)
     if !SciMLBase.successful_retcode(solution)
         @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10

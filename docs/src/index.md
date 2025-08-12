@@ -32,6 +32,7 @@ The following methods are available
 - [`SeeToDee.ForwardEuler`](@ref) An explicit 1st order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
 - [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form $0 = F(ẋ, x, u, p, t)$.
 - [`SeeToDee.Trapezoidal`](@ref) Trapezoidal integration with ZoH input. Supports stiff differential-algebraic equations (DAE).
+- [`SeeToDee.AdaptiveStep`](@ref) A wrapper that enables automatic step subdivision for taking arbitrary-length steps with any integrator. Note: this does not use error control, it only makes sure that the step size never exceeds that of the base integrator, `Ts / supersample`.
 
 See their docstrings for more details.
 
@@ -141,6 +142,31 @@ x1_implicit = discrete_dynamics_implicit(x0, u0, p, 0)
 @btime $discrete_dynamics_implicit($x0, $u0, 0, 0); # 21.911 μs (84 allocations: 50.39 KiB)
 ```
 For this system, the solve time is almost identical to the explicit collocation case, but for larger systems, the implicit form can be faster.
+
+### Using AdaptiveStep for arbitrary step sizes
+The `AdaptiveStep` wrapper allows you to take arbitrary step sizes with any integrator by automatically subdividing large steps:
+
+```@example STEP
+# Create an adaptive wrapper around the RK4 integrator
+adaptive_rk = SeeToDee.AdaptiveStep(discrete_dynamics_rk)
+
+# The effective largest step size (accounting for supersample=2)
+@show adaptive_rk.largest_Ts  # Should be Ts/2 = 0.005
+
+# Take a step that's larger than the base step size
+# This will automatically use supersample=10 internally
+large_step = 0.05  # 10x larger than largest_Ts
+x1_adaptive = adaptive_rk(x0, u0, p, 0; Ts=large_step)
+
+# Compare with manual stepping
+x_manual = x0
+for i in 1:10
+    global x_manual
+    x_manual = discrete_dynamics_rk(x_manual, u0, p, (i-1)*0.005; Ts=0.005)
+end
+
+@test x1_adaptive ≈ x_manual rtol=1e-8  # Should be nearly identical
+```
 
 ## Simulate whole trajectories
 Simulation is done by implementing the loop manually, for example (pseudocode)

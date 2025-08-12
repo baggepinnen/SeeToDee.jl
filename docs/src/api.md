@@ -14,6 +14,7 @@ SeeToDee.Heun
 SeeToDee.ForwardEuler
 SeeToDee.SimpleColloc
 SeeToDee.Trapezoidal
+SeeToDee.AdaptiveStep
 ```
 ### Utilities
 ```@docs
