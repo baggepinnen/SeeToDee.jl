@@ -5,6 +5,7 @@ using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgeb
 export SimpleColloc, AdaptiveStep
 # public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal
 
+abstract type AbstractIntegrator <: Function end
 
 
 """
@@ -80,7 +81,7 @@ x1 = adaptive(x0, u, 0, 0; Ts=0.02)  # Direct call
 x2 = adaptive(x0, u, 0, 0; Ts=0.5)   # Uses supersample=15 internally
 ```
 """
-struct AdaptiveStep{I,T}
+struct AdaptiveStep{I,T} <: AbstractIntegrator
     integ::I
     largest_Ts::T
 end
@@ -121,7 +122,7 @@ Discretize a continuous-time dynamics function `f` using RK4 with sample time `T
 
 If called with StaticArrays, this integrator is allocation free.
 """
-struct Rk4{F,TS}
+struct Rk4{F,TS} <: AbstractIntegrator
     f::F
     Ts::TS
     supersample::Int
@@ -201,7 +202,7 @@ Discretize a continuous-time dynamics function `f` using RK3 with sample time `T
 
 If called with StaticArrays, this integrator is allocation free.
 """
-struct Rk3{F,TS}
+struct Rk3{F,TS} <: AbstractIntegrator
     f::F
     Ts::TS
     supersample::Int
@@ -250,7 +251,7 @@ Discretize a continuous-time dynamics function `f` using forward Euler with samp
 
 If called with StaticArrays, this integrator is allocation free.
 """
-struct ForwardEuler{F,TS}
+struct ForwardEuler{F,TS} <: AbstractIntegrator
     f::F
     Ts::TS
     supersample::Int
@@ -296,7 +297,7 @@ Discretize a continuous-time dynamics function `f` using Heun's method with samp
 
 If called with StaticArrays, this integrator is allocation free.
 """
-struct Heun{F,TS}
+struct Heun{F,TS} <: AbstractIntegrator
     f::F
     Ts::TS
     supersample::Int
@@ -359,7 +360,7 @@ function diffoperator(n, Ts::T, ::typeof(gaussradau) = gaussradau) where T
     T.((A/B) ./ Ts), T.(τ), w
 end
 
-struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S}
+struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S} <: AbstractIntegrator
     dyn::F
     Ts::T
     nx::Int
@@ -425,7 +426,7 @@ end
 
 function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
     T = float(T0)
-    D, τ = diffoperator(n, Ts, nodetype)
+    D, τ = diffoperator(n, float(Ts), nodetype)
     nx = length(x_inds)
     na = length(a_inds)
     cv = zeros(T, (nx+na)*n)
@@ -435,7 +436,7 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
 
     problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
 
-    SimpleColloc(dyn, Ts, nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual)
+    SimpleColloc(dyn, float(Ts), nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual)
 end
 
 function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
@@ -486,8 +487,9 @@ function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol)::T 
     end
     problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t, args...))
     solution = solve(problem, integ.solver; abstol)
+    Main.sol = solution
     if !SciMLBase.successful_retcode(solution)
-        @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10
+        @warn "Nonlinear solve failed to converge" solution.retcode# maxlog=10
     end
     @views T(solution.u[end-nx-na+1:end])
 end
@@ -524,7 +526,7 @@ end
 
 ## =============================================================================
 
-struct Trapezoidal{F,T,X,A,NP,S}
+struct Trapezoidal{F,T,X,A,NP,S} <: AbstractIntegrator
     dyn::F
     Ts::T
     nx::Int
