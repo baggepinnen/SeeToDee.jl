@@ -487,7 +487,6 @@ function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol)::T 
     end
     problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t, args...))
     solution = solve(problem, integ.solver; abstol)
-    Main.sol = solution
     if !SciMLBase.successful_retcode(solution)
         @warn "Nonlinear solve failed to converge" solution.retcode# maxlog=10
     end
