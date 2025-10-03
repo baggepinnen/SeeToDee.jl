@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Home · SeeToDee Documentation</title><meta name="title" content="Home · SeeToDee Documentation"/><meta property="og:title" content="Home · SeeToDee Documentation"/><meta property="twitter:title" content="Home · SeeToDee Documentation"/><meta name="description" content="Documentation for SeeToDee Documentation."/><meta property="og:description" content="Documentation for SeeToDee Documentation."/><meta property="twitter:description" content="Documentation for SeeToDee Documentation."/><script data-outdated-warner src="assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="search_index.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href>SeeToDee Documentation</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>Home</a><ul class="internal"><li><a class="tocitem" href="#Available-discretization-methods"><span>Available discretization methods</span></a></li><li><a class="tocitem" href="#When-is-this-package-useful?"><span>When is this package useful?</span></a></li><li><a class="tocitem" href="#Example"><span>Example</span></a></li><li><a class="tocitem" href="#Simulate-whole-trajectories"><span>Simulate whole trajectories</span></a></li><li><a class="tocitem" href="#Batch-propagation-and-GPU-support"><span>Batch propagation and GPU support</span></a></li><li><a class="tocitem" href="#Usage-in-the-wild"><span>Usage in the wild</span></a></li></ul></li><li><a class="tocitem" href="api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Home</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Home</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/baggepinnen/SeeToDee.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/baggepinnen/SeeToDee.jl/blob/main/docs/src/index.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="SeeToDee"><a class="docs-heading-anchor" href="#SeeToDee">SeeToDee</a><a id="SeeToDee-1"></a><a class="docs-heading-anchor-permalink" href="#SeeToDee" title="Permalink"></a></h1><p><a href="https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml?query=branch%3Amain"><img src="https://github.com/baggepinnen/SeeToDee.jl/actions/workflows/CI.yml/badge.svg?branch=main" alt="Build Status"/></a></p><p>SeeToDee implements low-overhead, nonlinear variants of the classical <a href="https://juliacontrol.github.io/ControlSystems.jl/dev/lib/synthesis/#ControlSystemsBase.c2d"><code>c2d</code></a> function from <a href="https://github.com/JuliaControl/ControlSystems.jl">ControlSystems.jl</a>.</p><p>Given a continuous-time dynamics function</p><p class="math-container">\[\dot x = f(x, u, p, t)\]</p><p>this package contains <em>integrators</em> that convert the continuous-time dynamics into a discrete-time dynamics function</p><p class="math-container">\[x_{t+T_s} = f(x_t, u_t, p, t)\]</p><p>that advances the state from time <span>$t$</span> to time <span>$t+T_s$</span>, with a <a href="https://en.wikipedia.org/wiki/Zero-order_hold">Zero-order-Hold (ZoH)</a> assumption on the input <span>$u$</span>.</p><p>The integrators in this package focus on</p><ul><li><strong>Inputs are first class</strong>, i.e., the signature of the dynamics take input signals (such as control signals or disturbance inputs) as arguments. This is in contrast to the DifferentialEquations ecosystem, where there are <a href="https://help.juliahub.com/juliasimcontrol/dev/simulation/">several different ways of handling inputs</a>, none of which are quite first class.</li><li><strong>Low overhead</strong> for single-step integration, i.e., no solution handling, no interpolation, nothing fancy at all.</li><li><strong>Fixed time step</strong>. All integrators are non-adaptive, i.e., the integrators do not change their step size using error control. This typically makes the integrator have a more <strong>predictable runtime</strong>. It also reduces overhead without affecting accuracy in situations when the fixed step-size is small in relation to what would be required to meet the desired accuracy, a situation which is common when simulating control systems. It also means that the user is responsible for checking the accuracy for the chosen step size.</li><li><strong>Dirt-simple interface</strong>, i.e., you literally use the integrator as a function <code>x⁺ = f(x, u, p, t)</code> that you can call in a loop etc. to perform simulations.</li><li>Most things are <strong>manual</strong>. Want to simulate a trajectory? Write a loop!</li></ul><h2 id="Available-discretization-methods"><a class="docs-heading-anchor" href="#Available-discretization-methods">Available discretization methods</a><a id="Available-discretization-methods-1"></a><a class="docs-heading-anchor-permalink" href="#Available-discretization-methods" title="Permalink"></a></h2><p>The following methods are available</p><ul><li><a href="api/#SeeToDee.Rk4"><code>SeeToDee.Rk4</code></a> An explicit 4th order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.</li><li><a href="api/#SeeToDee.Rk3"><code>SeeToDee.Rk3</code></a> An explicit 3rd order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.</li><li><a href="api/#SeeToDee.Heun"><code>SeeToDee.Heun</code></a> An explicit 2nd order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.</li><li><a href="api/#SeeToDee.ForwardEuler"><code>SeeToDee.ForwardEuler</code></a> An explicit 1st order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.</li><li><a href="api/#SeeToDee.SimpleColloc"><code>SeeToDee.SimpleColloc</code></a> A <a href="https://www.equalsharepress.com/media/NMFSC.pdf">textbook</a> implementation of a direct collocation method with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form <span>$0 = F(ẋ, x, u, p, t)$</span>.</li><li><a href="api/#SeeToDee.Trapezoidal"><code>SeeToDee.Trapezoidal</code></a> Trapezoidal integration with ZoH input. Supports stiff differential-algebraic equations (DAE).</li><li><a href="api/#SeeToDee.AdaptiveStep"><code>SeeToDee.AdaptiveStep</code></a> A wrapper that enables automatic step subdivision for taking arbitrary-length steps with any integrator. Note: this does not use error control, it only makes sure that the step size never exceeds that of the base integrator, <code>Ts / supersample</code>.</li><li><a href="api/#SeeToDee.SwitchingIntegrator"><code>SeeToDee.SwitchingIntegrator</code></a> A wrapper that switches between two different integrators based on a user-defined condition. Useful for adaptive selection of integration methods based on state, time, or parameters.</li></ul><p>See their docstrings for more details.</p><h2 id="When-is-this-package-useful?"><a class="docs-heading-anchor" href="#When-is-this-package-useful?">When is this package useful?</a><a id="When-is-this-package-useful?-1"></a><a class="docs-heading-anchor-permalink" href="#When-is-this-package-useful?" title="Permalink"></a></h2><p>Control systems are most of the time implemented in discrete time a computer, but they may interact with the continuous-time world around them. Simulation of the combined system including both the discrete-time controller and the continuous-time world is therefore a common task. The typically fixed sample interval of the controller, <span>$T_s$</span>, is thus presenting an upper bound to the length of the integration step in the simulation, an adaptive solver cannot take longer steps than this since the input is discountinuous with the invocation of the controller. If the sample time is short, a good adaptive algorithm will thus always take a step of length <span>$T_s$</span>, but figuring this out incurs unnecessary overhead. </p><p>The invocation of the controller also means that some additional code, the implementation of the controller, has to be run at a fixed interval, but not in-between. The DifferentialEquations ecosystem provides <em>callbacks</em> for this purpose. Making use of the callback is associated with a <a href="https://help.juliahub.com/juliasimcontrol/dev/simulation/#Use-of-a-discrete-controller-in-a-continuous-time-simulation">very large amount of boilerplate</a> already for simple control-system simulations.</p><p>It&#39;s also common to want to do <em>more than just simulation</em>, for example, linearize the dynamics or state estimation. In both of those cases, one may be interested in integrating a single step of length <span>$T_s$</span> only, starting from an arbitrary initial condition. In such situations, a one-liner function call is then preferable to a 10+ lines configuration of a traditional ODE solver, combined with the appropriate calls to <code>remake</code> etc. in-between calls.</p><h3 id="When-should-you-not-use-this-package?"><a class="docs-heading-anchor" href="#When-should-you-not-use-this-package?">When should you not use this package?</a><a id="When-should-you-not-use-this-package?-1"></a><a class="docs-heading-anchor-permalink" href="#When-should-you-not-use-this-package?" title="Permalink"></a></h3><ul><li>If inputs that change at a fixed interval is not an integral part of your dynamics.</li><li>Your system requires a very special integrator for simulation.</li><li>Your system is very large, e.g., a discretized PDE.</li><li>If the sample interval <span>$T_s$</span> is long in relation to the time constants of the system, then an adaptive solver may be more efficient despite the discontinuities.</li></ul><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>The example below defines a dynamics function <code>cartpole</code> and then discretizes this using <a href="api/#SeeToDee.Rk4"><code>SeeToDee.Rk4</code></a> and propagates the state forward one time step</p><pre><code class="language-julia hljs">using SeeToDee, StaticArrays
+
+function cartpole(x, u, p, t)
+    T = promote_type(eltype(x), eltype(u))
+    mc, mp, l, g = p
+
+    q  = x[SA[1, 2]]
+    qd = x[SA[3, 4]]
+
+    s = sin(q[2])
+    c = cos(q[2])
+
+    H = @SMatrix [mc+mp mp*l*c; mp*l*c mp*l^2]
+    C = @SMatrix [0 -mp*qd[2]*l*s; 0 0]
+    G = @SVector [0, mp * g * l * s]
+    B = @SVector [1, 0]
+    qdd = -H \ (C * qd + G - B * u[1])
+    return [qd; qdd]
+end
+
+Ts = 0.01
+discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=2)
+
+x0 = SA[1.0, 2.0, 3.0, 4.0]
+u0 = SA[1.0]
+p = mc, mp, l, g = 1.0, 0.2, 0.5, 9.81
+
+x1_rk4 = discrete_dynamics_rk(x0, u0, p, 0)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element StaticArraysCore.SVector{4, Float64} with indices SOneTo(4):
+ 1.030070812063625
+ 2.0391740784608836
+ 3.013901837105509
+ 3.835309019317308</code></pre><p>The function <code>discrete_dynamics_rk</code> is now the discretized dynamics <span>$x^+ = f(x, u, p, t)$</span>, and <code>x1_rk4</code> is the state at time <span>$0+T_s$</span>. </p><p>Next, we do the same but with <a href="api/#SeeToDee.SimpleColloc"><code>SeeToDee.SimpleColloc</code></a> instead of <a href="api/#SeeToDee.Rk4"><code>SeeToDee.Rk4</code></a>.</p><pre><code class="language-julia hljs">n  = 5 # Number of collocation points
+nx = 4 # Number of differential state variables
+na = 0 # Number of algebraic variables
+nu = 1 # Number of inputs
+
+discrete_dynamics_colloc = SeeToDee.SimpleColloc(cartpole, Ts, nx, na, nu; n, abstol=1e-10)
+x1_colloc = discrete_dynamics_colloc(x0, u0, p, 0)
+
+using Test
+@test x1_rk4 ≈ x1_colloc atol=1e-2 # Test the it&#39;s roughly the same as the output of RK4</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr32"><span class="sgr1">Test Passed</span></span></code></pre><p>If we benchmark these two methods</p><pre><code class="language-julia hljs">@btime $discrete_dynamics_rk($x0, $u0, $p, 0);     # 203.633 ns (0 allocations: 0 bytes)
+@btime $discrete_dynamics_colloc($x0, $u0, $p, 0); # 22.072 μs (80 allocations: 50.23 KiB)</code></pre><p>the explicit RK4 method is <em>much</em> faster in this case.</p><h3 id="Using-fully-implicit-dynamics"><a class="docs-heading-anchor" href="#Using-fully-implicit-dynamics">Using fully implicit dynamics</a><a id="Using-fully-implicit-dynamics-1"></a><a class="docs-heading-anchor-permalink" href="#Using-fully-implicit-dynamics" title="Permalink"></a></h3><p>Below, we define the same dynamics as above, but this time in the fully implicit form</p><p class="math-container">\[0 = F(ẋ, x, u, p, t)\]</p><p>This is occasionally useful in order to avoid inverting large coordinate-dependent mass matrices for mechanical systems etc. In the <code>cartpole</code> function, the mass matrix is called <code>H</code>, and it&#39;s of size 2×2</p><pre><code class="language-julia hljs">function cartpole_implicit(dx, x, u, p, _=0)
+    mc, mp, l, g = 1.0, 0.2, 0.5, 9.81
+
+    q  = x[SA[1, 2]]
+    qd = x[SA[3, 4]]
+
+    s = sin(q[2])
+    c = cos(q[2])
+
+    H = @SMatrix [mc+mp mp*l*c; mp*l*c mp*l^2]
+    C = @SMatrix [0 -mp*qd[2]*l*s; 0 0]
+    G = @SVector [0, mp * g * l * s]
+    B = @SVector [1, 0]
+    Hqdd = (C * qd + G - B * u[1]) # Acceleration times mass matrix H
+    return [qd; -Hqdd] - [dx[SA[1, 2]]; H*dx[SA[3, 4]]] # We multiply H here instead of inverting H like above
+end
+
+discrete_dynamics_implicit = SimpleColloc(cartpole_implicit, Ts, nx, na, nu; n, abstol=1e-10, residual=true)
+
+x1_implicit = discrete_dynamics_implicit(x0, u0, p, 0)
+
+@test x1_implicit ≈ x1_colloc atol=1e-9</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr32"><span class="sgr1">Test Passed</span></span></code></pre><pre><code class="language-julia hljs">@btime $discrete_dynamics_implicit($x0, $u0, 0, 0); # 21.911 μs (84 allocations: 50.39 KiB)</code></pre><p>For this system, the solve time is almost identical to the explicit collocation case, but for larger systems, the implicit form can be faster.</p><h3 id="Using-AdaptiveStep-for-arbitrary-step-sizes"><a class="docs-heading-anchor" href="#Using-AdaptiveStep-for-arbitrary-step-sizes">Using AdaptiveStep for arbitrary step sizes</a><a id="Using-AdaptiveStep-for-arbitrary-step-sizes-1"></a><a class="docs-heading-anchor-permalink" href="#Using-AdaptiveStep-for-arbitrary-step-sizes" title="Permalink"></a></h3><p>The <code>AdaptiveStep</code> wrapper allows you to take arbitrary step sizes with any integrator by automatically subdividing large steps:</p><pre><code class="language-julia hljs"># Create an adaptive wrapper around the RK4 integrator
+adaptive_rk = SeeToDee.AdaptiveStep(discrete_dynamics_rk)
+
+# The effective largest step size (accounting for supersample=2)
+@show adaptive_rk.largest_Ts  # Should be Ts/2 = 0.005
+
+# Take a step that&#39;s larger than the base step size
+# This will automatically use supersample=10 internally
+large_step = 0.05  # 10x larger than largest_Ts
+x1_adaptive = adaptive_rk(x0, u0, p, 0; Ts=large_step)
+
+# Compare with manual stepping
+x_manual = x0
+for i in 1:10
+    global x_manual
+    x_manual = discrete_dynamics_rk(x_manual, u0, p, (i-1)*0.005; Ts=0.005)
+end
+
+@test x1_adaptive ≈ x_manual rtol=1e-8  # Should be nearly identical</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr32"><span class="sgr1">Test Passed</span></span></code></pre><h3 id="Using-SwitchingIntegrator-for-conditional-integration"><a class="docs-heading-anchor" href="#Using-SwitchingIntegrator-for-conditional-integration">Using SwitchingIntegrator for conditional integration</a><a id="Using-SwitchingIntegrator-for-conditional-integration-1"></a><a class="docs-heading-anchor-permalink" href="#Using-SwitchingIntegrator-for-conditional-integration" title="Permalink"></a></h3><p>The <a href="api/#SeeToDee.SwitchingIntegrator"><code>SeeToDee.SwitchingIntegrator</code></a> allows you to switch between two different integrators based on runtime conditions. This is useful when you want to use a fast integrator in well-behaved regions and a more accurate (but slower) integrator otherwise:</p><pre><code class="language-julia hljs">using LinearAlgebra
+# Create a fast and an accurate integrator
+fast_integrator = SeeToDee.ForwardEuler(cartpole, Ts; supersample=1)
+accurate_integrator = SeeToDee.Rk4(cartpole, Ts; supersample=3)
+
+# Define a condition: use fast integrator when state norm is small
+condition = (x, u, p, t) -&gt; norm(x) &lt; 5.0
+
+# Create the switching integrator
+switching_integrator = SeeToDee.SwitchingIntegrator(
+    fast_integrator,
+    accurate_integrator,
+    condition
+)
+
+# Use it like any other integrator
+x_small = SA[0.1, 0.2, 0.3, 0.4]  # Small state, uses fast integrator
+x1_small = switching_integrator(x_small, u0, p, 0)
+
+x_large = SA[10.0, 10.0, 10.0, 10.0]  # Large state, uses accurate integrator
+x1_large = switching_integrator(x_large, u0, p, 0)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element StaticArraysCore.SVector{4, Float64} with indices SOneTo(4):
+ 10.099820906420423
+ 10.100267131393556
+  9.963012588200368
+ 10.054913532326067</code></pre><p>You can also switch based on time, parameters, or any combination:</p><pre><code class="language-julia hljs"># Time-based switching: fast integrator during transients, accurate in steady-state
+time_switching = SeeToDee.SwitchingIntegrator(
+    accurate_integrator,
+    fast_integrator,
+    (x, u, p, t) -&gt; t &lt; 1.0  # Use accurate integrator for first second
+)
+
+# Parameter-based switching
+param_switching = SeeToDee.SwitchingIntegrator(
+    fast_integrator,
+    accurate_integrator,
+    (x, u, p, t) -&gt; p[1] &gt; 0.5  # Switch based on first parameter
+)</code></pre><h2 id="Simulate-whole-trajectories"><a class="docs-heading-anchor" href="#Simulate-whole-trajectories">Simulate whole trajectories</a><a id="Simulate-whole-trajectories-1"></a><a class="docs-heading-anchor-permalink" href="#Simulate-whole-trajectories" title="Permalink"></a></h2><p>Simulation is done by implementing the loop manually, for example (pseudocode)</p><pre><code class="language-julia hljs">discrete_dynamics = SeeToDee.Rk4(cartpole, Ts; supersample=2)
+
+x = x0
+X = [x]
+U = []
+for i = 1:T
+    u = compute_control_input(x)      # State feedback, MPC, etc.
+    x = discrete_dynamics(x, u, p, t) # Propagate state forward one step
+    push!(X, x) # Log data
+    push!(U, u)
+end</code></pre><h2 id="Batch-propagation-and-GPU-support"><a class="docs-heading-anchor" href="#Batch-propagation-and-GPU-support">Batch propagation and GPU support</a><a id="Batch-propagation-and-GPU-support-1"></a><a class="docs-heading-anchor-permalink" href="#Batch-propagation-and-GPU-support" title="Permalink"></a></h2><p>Using <a href="api/#SeeToDee.Rk4"><code>SeeToDee.Rk4</code></a>, it&#39;s possible to propagate a batch of <code>N</code> states forward in time by writing the dynamics to accept matrices <code>x</code> and <code>u</code> where <code>size(x) = (nx, N)</code>. No further changes are required. This also works if <code>x, u</code> are GPU arrays, such as those from CUDA.jl. For best performance on the GPU, make sure to construct the <code>Rk4</code> object using a sample time of type <code>Float32</code> and make sure that your <code>x, u</code> are also of element type <code>Float32</code>. <code>N</code> has to be rather large for this to be worthwhile. Propagating the state in batches can be useful when implementing, e.g., a particle filter.</p><h2 id="Usage-in-the-wild"><a class="docs-heading-anchor" href="#Usage-in-the-wild">Usage in the wild</a><a id="Usage-in-the-wild-1"></a><a class="docs-heading-anchor-permalink" href="#Usage-in-the-wild" title="Permalink"></a></h2><p>This package is used in the following places</p><ul><li><a href="https://github.com/JuliaControl/DiscretePIDs.jl#example-using-seetodee">DiscretePIDs.jl</a></li><li><a href="https://github.com/baggepinnen/LowLevelParticleFilters.jl">LowLevelParticleFilters.jl</a>, see <a href="https://juliahub.com/ui/Notebooks/fredrik-carlson2/controlsystems/dae_stateest.jl">tutorial</a>.</li><li><a href="https://youtu.be/GKl8Tz9n2gs?si=V4ubuJsRTtSjgVxb">ODE parameter calibration (video)</a></li></ul></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="api/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Friday 3 October 2025 13:33">Friday 3 October 2025</span>. Using Julia version 1.11.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
