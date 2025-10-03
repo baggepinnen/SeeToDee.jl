@@ -112,6 +112,33 @@ function (as::AdaptiveStep)(x, u, p, t, args...; Ts=as.integ.Ts, kwargs...)
     end
 end
 
+## SwitchingIntegrator =========================================================
+"""
+    SwitchingIntegrator(int_true, int_false, cond)
+
+Create an integrator that switches between two different integrators based on a condition.
+- `int_true`: Integrator to use when `cond(...)` is true
+- `int_false`: Integrator to use when `cond(...)` is false
+- `cond`: A function that takes the same arguments as the integrator and returns a `Bool`
+
+This can be used to, e.g., use a faster integrator when the state is in a certain region and a more accurate (but slower) integrator otherwise.
+"""
+struct SwitchingIntegrator{D,S,C} <: AbstractIntegrator
+    dyn::D
+    ss::S
+    cond::C
+end
+
+function (DI::SwitchingIntegrator)(args...; kwargs...)
+    if DI.cond(args...)
+        return DI.dyn(args...; kwargs...)
+    else
+        return DI.ss(args...; kwargs...)
+    end
+end
+
+## RK4 =========================================================================
+
 """
     f_discrete = Rk4(f, Ts; supersample = 1)
 
