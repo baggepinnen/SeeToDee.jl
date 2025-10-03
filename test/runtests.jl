@@ -197,9 +197,80 @@ end
         include("test_time.jl")
     end
 
+    @testset "SwitchingIntegrator" begin
+        @info "Testing SwitchingIntegrator"
+
+        Ts = 0.1
+        x = SA[1.0, 2.0, 3.0, 4.0]
+        u = SA[1.0]
+
+        # Create two different integrators
+        fast_integrator = SeeToDee.ForwardEuler(cartpole, Ts; supersample=1)
+        accurate_integrator = SeeToDee.Rk4(cartpole, Ts; supersample=3)
+
+        # Test condition: use fast integrator when norm(x) < 5, otherwise use accurate one
+        cond = (x, u, p, t) -> norm(x) < 5.0
+
+        switching_integrator = SeeToDee.SwitchingIntegrator(fast_integrator, accurate_integrator, cond)
+
+        # Test that it's an AbstractIntegrator
+        @test switching_integrator isa SeeToDee.AbstractIntegrator
+
+        # Test when condition is true (norm(x) = ~5.48)
+        x_small = SA[1.0, 1.0, 1.0, 1.0]  # norm = 2.0
+        result_true = switching_integrator(x_small, u, 0, 0)
+        expected_true = fast_integrator(x_small, u, 0, 0)
+        @test result_true ≈ expected_true
+
+        # Test when condition is false
+        x_large = SA[10.0, 10.0, 10.0, 10.0]  # norm = 20.0
+        result_false = switching_integrator(x_large, u, 0, 0)
+        expected_false = accurate_integrator(x_large, u, 0, 0)
+        @test result_false ≈ expected_false
+
+        # Test type inference
+        @inferred switching_integrator(x_small, u, 0, 0)
+        @inferred switching_integrator(x_large, u, 0, 0)
+
+        # Test that it properly forwards kwargs
+        result_with_ts = switching_integrator(x_small, u, 0, 0; Ts=0.05)
+        expected_with_ts = fast_integrator(x_small, u, 0, 0; Ts=0.05)
+        @test result_with_ts ≈ expected_with_ts
+
+        # Test with different condition (time-based switching)
+        time_cond = (x, u, p, t) -> t < 0.5
+        time_switching = SeeToDee.SwitchingIntegrator(fast_integrator, accurate_integrator, time_cond)
+
+        result_early = time_switching(x, u, 0, 0.2)
+        @test result_early ≈ fast_integrator(x, u, 0, 0.2)
+
+        result_late = time_switching(x, u, 0, 1.0)
+        @test result_late ≈ accurate_integrator(x, u, 0, 1.0)
+
+        # Test with parameter-based condition
+        param_cond = (x, u, p, t) -> p > 0
+        param_switching = SeeToDee.SwitchingIntegrator(fast_integrator, accurate_integrator, param_cond)
+
+        result_pos = param_switching(x, u, 1.0, 0)
+        @test result_pos ≈ fast_integrator(x, u, 1.0, 0)
+
+        result_neg = param_switching(x, u, -1.0, 0)
+        @test result_neg ≈ accurate_integrator(x, u, -1.0, 0)
+
+        # Test switching during simulation
+        X = [x_small]
+        for i = 1:10
+            x_current = X[end]
+            x_next = switching_integrator(x_current, u, 0, (i-1)*Ts)
+            push!(X, x_next)
+        end
+        @test length(X) == 11
+        @test all(x -> x isa SVector{4, Float64}, X)
+    end
+
     @testset "AdaptiveStep" begin
         @info "Testing AdaptiveStep"
-        
+
         # Test with explicit integrators (these support supersample and Ts keywords)
         Ts_base = 0.1
         discrete_rk4 = SeeToDee.Rk4(cartpole, Ts_base; supersample=2)
