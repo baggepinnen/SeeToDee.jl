@@ -15,6 +15,7 @@ SeeToDee.ForwardEuler
 SeeToDee.SimpleColloc
 SeeToDee.Trapezoidal
 SeeToDee.AdaptiveStep
+SeeToDee.SwitchingIntegrator
 ```
 ### Utilities
 ```@docs

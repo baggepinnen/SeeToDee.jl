@@ -33,6 +33,7 @@ The following methods are available
 - [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form $0 = F(ẋ, x, u, p, t)$.
 - [`SeeToDee.Trapezoidal`](@ref) Trapezoidal integration with ZoH input. Supports stiff differential-algebraic equations (DAE).
 - [`SeeToDee.AdaptiveStep`](@ref) A wrapper that enables automatic step subdivision for taking arbitrary-length steps with any integrator. Note: this does not use error control, it only makes sure that the step size never exceeds that of the base integrator, `Ts / supersample`.
+- [`SeeToDee.SwitchingIntegrator`](@ref) A wrapper that switches between two different integrators based on a user-defined condition. Useful for adaptive selection of integration methods based on state, time, or parameters.
 
 See their docstrings for more details.
 
@@ -166,6 +167,50 @@ for i in 1:10
 end
 
 @test x1_adaptive ≈ x_manual rtol=1e-8  # Should be nearly identical
+```
+
+### Using SwitchingIntegrator for conditional integration
+The [`SwitchingIntegrator`](@ref) allows you to switch between two different integrators based on runtime conditions. This is useful when you want to use a fast integrator in well-behaved regions and a more accurate (but slower) integrator otherwise:
+
+```@example STEP
+# Create a fast and an accurate integrator
+fast_integrator = SeeToDee.ForwardEuler(cartpole, Ts; supersample=1)
+accurate_integrator = SeeToDee.Rk4(cartpole, Ts; supersample=3)
+
+# Define a condition: use fast integrator when state norm is small
+condition = (x, u, p, t) -> norm(x) < 5.0
+
+# Create the switching integrator
+switching_integrator = SeeToDee.SwitchingIntegrator(
+    fast_integrator,
+    accurate_integrator,
+    condition
+)
+
+# Use it like any other integrator
+x_small = SA[0.1, 0.2, 0.3, 0.4]  # Small state, uses fast integrator
+x1_small = switching_integrator(x_small, u0, p, 0)
+
+x_large = SA[10.0, 10.0, 10.0, 10.0]  # Large state, uses accurate integrator
+x1_large = switching_integrator(x_large, u0, p, 0)
+```
+
+You can also switch based on time, parameters, or any combination:
+```@example STEP
+# Time-based switching: fast integrator during transients, accurate in steady-state
+time_switching = SeeToDee.SwitchingIntegrator(
+    accurate_integrator,
+    fast_integrator,
+    (x, u, p, t) -> t < 1.0  # Use accurate integrator for first second
+)
+
+# Parameter-based switching
+param_switching = SeeToDee.SwitchingIntegrator(
+    fast_integrator,
+    accurate_integrator,
+    (x, u, p, t) -> p[1] > 0.5  # Switch based on first parameter
+)
+nothing # hide
 ```
 
 ## Simulate whole trajectories
