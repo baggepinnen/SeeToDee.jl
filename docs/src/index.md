@@ -170,9 +170,10 @@ end
 ```
 
 ### Using SwitchingIntegrator for conditional integration
-The [`SwitchingIntegrator`](@ref) allows you to switch between two different integrators based on runtime conditions. This is useful when you want to use a fast integrator in well-behaved regions and a more accurate (but slower) integrator otherwise:
+The [`SeeToDee.SwitchingIntegrator`](@ref) allows you to switch between two different integrators based on runtime conditions. This is useful when you want to use a fast integrator in well-behaved regions and a more accurate (but slower) integrator otherwise:
 
 ```@example STEP
+using LinearAlgebra
 # Create a fast and an accurate integrator
 fast_integrator = SeeToDee.ForwardEuler(cartpole, Ts; supersample=1)
 accurate_integrator = SeeToDee.Rk4(cartpole, Ts; supersample=3)
