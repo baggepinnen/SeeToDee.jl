@@ -387,7 +387,7 @@ function diffoperator(n, Ts::T, ::typeof(gaussradau) = gaussradau) where T
     T.((A/B) ./ Ts), T.(τ), w
 end
 
-struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S} <: AbstractIntegrator
+struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S,SX} <: AbstractIntegrator
     dyn::F
     Ts::T
     nx::Int
@@ -401,6 +401,7 @@ struct SimpleColloc{F,T,X,A,DT,TP,CT,NP,S} <: AbstractIntegrator
     nlproblem::NP
     solver::S
     residual::Bool
+    scale_x::SX
 end
 
 function get_cache!(integ::SimpleColloc, x::AbstractArray{T}) where T#::Tuple{Vector{T}, Matrix{T}, Matrix{T}, Matrix{T}} where T
@@ -441,6 +442,7 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - `abstol`: Tolerance for the root finding algorithm
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
+- `scale_x`: If provided, the state variables are scaled by this vector before being passed to the nonlinear solver. This can improve convergence for states with very different magnitudes. The scaling is applied as `res .= res ./ scale_x` before being passed to the solver.
 
 # Extended help
 - Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
@@ -451,7 +453,7 @@ function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T
     SimpleColloc(dyn, Ts, x_inds, a_inds, args...; kwargs...)
 end
 
-function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, nodetype=gaussradau) where T0 <: Real
+function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; n=5, abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, nodetype=gaussradau, scale_x=nothing) where T0 <: Real
     T = float(T0)
     D, τ = diffoperator(n, float(Ts), nodetype)
     nx = length(x_inds)
@@ -463,7 +465,7 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
 
     problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
 
-    SimpleColloc(dyn, float(Ts), nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual)
+    SimpleColloc(dyn, float(Ts), nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual, scale_x)
 end
 
 function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
@@ -483,11 +485,15 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
     simple_mul!(ẋ, x_cache, D') # Applying the diff operator computes ẋ
     copyto!(cv, ẋ) # This renames ẋ back to cv
 
+    allinds = 1:(nx+na)
     if residual
-        allinds = 1:(nx+na)
         @views for k in 1:n_c
             res          = dyn(ẋ[:,k], x[:,k], u, p, t+τ[k], args...)
-            cv[allinds] .= res
+            if integ.scale_x === nothing
+                cv[allinds] .= res
+            else
+                cv[allinds] .= res ./ integ.scale_x
+            end
             allinds      = allinds .+ (nx+na)
         end
     else
@@ -498,6 +504,10 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
 
             cv[inds_alg] .=  temp_dyn[nx+1:end]
             inds_alg      = inds_alg .+ (nx+na)
+            if integ.scale_x !== nothing
+                cv[allinds] ./= integ.scale_x
+                allinds      = allinds .+ (nx+na)
+            end
         end
     end
     cv
@@ -552,7 +562,7 @@ end
 
 ## =============================================================================
 
-struct Trapezoidal{F,T,X,A,NP,S} <: AbstractIntegrator
+struct Trapezoidal{F,T,X,A,NP,S,SX} <: AbstractIntegrator
     dyn::F
     Ts::T
     nx::Int
@@ -563,6 +573,7 @@ struct Trapezoidal{F,T,X,A,NP,S} <: AbstractIntegrator
     nlproblem::NP
     solver::S
     residual::Bool
+    scale_x::SX
 end
 
 
@@ -588,6 +599,7 @@ The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
 - `abstol`: Tolerance for the root finding algorithm
 - `residual`: If `true` the dynamics function is assumed to return the residual of the entire state descriptor and have the signature `(ẋ, x, u, p, t) -> res`. This is sometimes called "fully implicit form".
 - `solver`: Any compatible SciML Nonlinear solver to use for the root finding problem
+- `scale_x`: If provided, the residual is scaled by this vector before being passed to the nonlinear solver, `res ./ scale_x`. This can help with convergence if the state variables have very different magnitudes.
 
 # Extended help
 - Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
@@ -598,7 +610,7 @@ function Trapezoidal(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0
     Trapezoidal(dyn, Ts, x_inds, a_inds, args...; kwargs...)
 end
 
-function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, inplace=true) where T0 <: Real
+function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; abstol=1e-8, solver=SimpleNewtonRaphson(), residual=false, inplace=true, scale_x=nothing) where T0 <: Real
     T = float(T0)
     nx = length(x_inds)
     na = length(a_inds)
@@ -610,7 +622,7 @@ function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; 
         problem = NonlinearProblem(coldyn_trapz_oop,x,SciMLBase.NullParameters())
     end
 
-    Trapezoidal(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual)
+    Trapezoidal(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual, scale_x)
 end
 
 function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
@@ -633,6 +645,9 @@ function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) w
             @views res[a_inds] .=  f1[a_inds]
         end
     end
+    if integ.scale_x !== nothing
+        res .= res ./ integ.scale_x
+    end
     res
 end
 
@@ -643,10 +658,17 @@ function coldyn_trapz_oop(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) wh
     f0 = dyn(x0, u, p, t,    args...)
     f1 = dyn(x,  u, p, t+Ts, args...)
     if isempty(a_inds)
-        return x0 .- x .+ (Ts/2) .* (f0 .+ f1)
+        if ingteg.scale_x !== nothing
+            return (x0 .- x .+ (Ts/2) .* (f0 .+ f1)) ./ integ.scale_x
+        else
+            return x0 .- x .+ (Ts/2) .* (f0 .+ f1)
+        end
     else
         res = [x0[x_inds] .- x[x_inds] .+ (Ts/2) .* (f0[x_inds] .+ f1[x_inds])
         f1[a_inds]]
+        if integ.scale_x !== nothing
+            res .= res ./ integ.scale_x
+        end
         if x isa Union{SVector, MVector} && !(res isa SVector)
             return SVector{length(x)}(res)
         else

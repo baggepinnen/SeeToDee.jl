@@ -116,14 +116,14 @@ end
     # Cartpole
 
     n = 5
-    discrete_dynamics = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-10, residual=false)#, solver=NonlinearSolve.NewtonRaphson())
-    discrete_dynamics_implicit = SeeToDee.SimpleColloc(cartpole_implicit, Ts, 4, 0, 1; n, abstol=1e-10, residual=true)
+    discrete_dynamics = SeeToDee.SimpleColloc(cartpole, Ts, 4, 0, 1; n, abstol=1e-10, residual=false, scale_x=[1,2,3,4])#, solver=NonlinearSolve.NewtonRaphson())
+    discrete_dynamics_implicit = SeeToDee.SimpleColloc(cartpole_implicit, Ts, 4, 0, 1; n, abstol=1e-10, residual=true, scale_x=[1,2,3,4])
     discrete_dynamics_rk = SeeToDee.Rk4(cartpole, Ts; supersample=3)
     discrete_dynamics_rk_ss = SeeToDee.Rk4(cartpole, Ts; supersample=200)
     discrete_dynamics_rk3 = SeeToDee.Rk3(cartpole, Ts; supersample=3)
     discrete_dynamics_fe = SeeToDee.ForwardEuler(cartpole, Ts; supersample=3)
     discrete_dynamics_heun = SeeToDee.Heun(cartpole, Ts; supersample=3)
-    discrete_dynamics_trapz = SeeToDee.Trapezoidal(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false)
+    discrete_dynamics_trapz = SeeToDee.Trapezoidal(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4])
 
     x = SA[1.0, 2.0, 3.0, 4.0]
     u = SA[1.0]
