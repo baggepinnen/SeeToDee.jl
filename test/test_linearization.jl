@@ -2,7 +2,6 @@ using SeeToDee
 using Test
 using ForwardDiff
 using StaticArrays
-using NonlinearSolve
 
 """
     A, B = linearize(f, x, u, args...)
