@@ -125,7 +125,7 @@ end
     @testset "SimpleColloc" begin
         integrator = SeeToDee.SimpleColloc(simple_dynamics, Ts, 1, 0, 1; n=3,
             # solver=NonlinearSolve.NewtonRaphson()
-            solver=SimpleNewtonRaphson()
+            # solver=SimpleNewtonRaphson()
         )
 
         A, B = linearize(integrator, x0_vec, u0_vec, 0, 0)
