@@ -197,6 +197,11 @@ end
         include("test_time.jl")
     end
 
+    @testset "linearization" begin
+        @info "Testing linearization"
+        include("test_linearization.jl")
+    end
+
     @testset "SwitchingIntegrator" begin
         @info "Testing SwitchingIntegrator"
 
