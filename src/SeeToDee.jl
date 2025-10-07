@@ -461,9 +461,9 @@ function SimpleColloc(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int;
     cv = zeros(T, (nx+na)*n)
     x = zeros(T, nx+na, n)
     ẋ = zeros(T, nx+na, n)
-    cache = (DiffCache(cv), DiffCache(x), DiffCache(ẋ), DiffCache(copy(x)))
+    cache = (DiffCache(cv, levels=2), DiffCache(x, levels=2), DiffCache(ẋ, levels=2), DiffCache(copy(x), levels=2))
 
-    problem = NonlinearProblem(coldyn,x,SciMLBase.NullParameters())
+    problem = NonlinearProblem{false}(coldyn,x,SciMLBase.NullParameters())
 
     SimpleColloc(dyn, float(Ts), nx, x_inds, a_inds, nu, T.(D), T.(τ*Ts), abstol, cache, problem, solver, residual, scale_x)
 end
@@ -472,6 +472,15 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
     (; dyn, x_inds, a_inds, D, τ, residual) = integ
     nx, na = length(x_inds), length(a_inds)
     cv, x_cache, ẋ, x = get_cache!(integ, xv)
+
+    # @show typeof(cv)
+    # println()
+    # @show typeof(x_cache)
+    # println()
+    # @show typeof(ẋ)
+    # println()
+    # @show typeof(x)
+    # println("\n"^3)
     # x = reshape(xv, nx+na, :)#::Matrix{T} # Use cache of correct size instead to avoid allocations
     copyto!(x, xv) # Reshape but allocation free
 
@@ -510,10 +519,14 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
             end
         end
     end
-    cv
+    if cv isa Base.ReinterpretArray
+        copy(cv)
+    else
+        cv
+    end
 end
 
-function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol)::T where T
+function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol, kwargs...)::T where T
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
     _, _, _, u00 = get_cache!(integ, x0)
@@ -523,7 +536,7 @@ function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol)::T 
         u0[i + (j-1)*nx0] = x0[i]
     end
     problem = SciMLBase.remake(integ.nlproblem, u0=u0,p=(integ, x0, u, p, t, args...))
-    solution = solve(problem, integ.solver; abstol)
+    solution = solve(problem, integ.solver; abstol, kwargs...)
     if !SciMLBase.successful_retcode(solution)
         @warn "Nonlinear solve failed to converge" solution.retcode# maxlog=10
     end
@@ -617,9 +630,9 @@ function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; 
     x = SVector(zeros(T, nx+na)...)
 
     if inplace
-        problem = NonlinearProblem(coldyn_trapz,x,SciMLBase.NullParameters())
+        problem = NonlinearProblem{true}(coldyn_trapz,x,SciMLBase.NullParameters())
     else
-        problem = NonlinearProblem(coldyn_trapz_oop,x,SciMLBase.NullParameters())
+        problem = NonlinearProblem{false}(coldyn_trapz_oop,x,SciMLBase.NullParameters())
     end
 
     Trapezoidal(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual, scale_x)
