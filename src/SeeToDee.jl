@@ -119,7 +119,7 @@ end
 Create an integrator that switches between two different integrators based on a condition.
 - `int_true`: Integrator to use when `cond(...)` is true
 - `int_false`: Integrator to use when `cond(...)` is false
-- `cond`: A function that takes the same arguments as the integrator and returns a `Bool`
+- `cond(x,u,p,t,args...)`: A function that takes the same arguments as the integrator and returns a `Bool`
 
 This can be used to, e.g., use a faster integrator when the state is in a certain region and a more accurate (but slower) integrator otherwise.
 """
@@ -704,6 +704,187 @@ function (integ::Trapezoidal)(x0::T, u, p, t, args...; abstol=integ.abstol)::T w
     end
     T(solution.u)
 end
+
+# ===============================================================================
+"""
+    f_discrete = RKC2(f, Ts; supersample=1, stages=nothing, L_est=nothing, eta=0.05)
+
+Discretize a continuous-time dynamics function `f` using a second-order stabilized explicit
+Runge–Kutta–Chebyshev (RKC2) method with sample time `Tₛ`.
+
+* `f` must have the signature `f(x, u, p, t) -> ẋ`.
+* The returned callable `f_discrete(x,u,p,t; Ts=Ts_override)` advances one step to `x(t+Tₛ)`.
+* `supersample` = number of internal substeps per call (keeps `u` constant inside the step).
+* `stages` = number of Chebyshev stages `m`. If not provided, it is chosen from `L_est`.
+* `L_est` = estimate of the spectral radius of the Jacobian (or diffusion operator) over the step;
+  if given (and `stages` not given), we pick `m` large enough so the step is stable.
+* `eta` = damping parameter in (0,1); 0.05–0.1 are common. Larger `eta` slightly shortens
+  the stability interval but improves internal stability.
+
+Notes
+-----
+• This is an *explicit stabilized* method: very effective when stiffness is mostly dissipative
+  (eigenvalues with large negative real parts, e.g., diffusion/semi-discrete parabolic PDEs).
+  It is *not* a general cure for oscillatory stiffness (strong imaginary spectrum).
+
+• If called with `StaticArrays`, the method is allocation free.
+"""
+struct RKC2{F,T<:Real}
+    f::F
+    Ts::T
+    supersample::Int
+    stages::Int
+    eta::T
+    a::Vector{T}
+    b::Vector{T}
+    w0::T
+    w1::T
+    μ::Vector{T}
+    ν::Vector{T}
+    κ::Vector{T}
+end
+
+
+function RKC2(f, Ts; supersample::Integer=1,
+            stages::Union{Nothing,Int}=nothing,
+            L_est::Union{Nothing,Real}=nothing,
+            eta::Real=0.05)
+    
+    # Automatically choose the number of stages if not provided
+    s = _rkc2_choose_stages(stages, L_est, Ts, eta)
+    
+    # Promote Ts and eta to a common floating-point type
+    Ty = promote_type(typeof(Ts), typeof(eta))
+
+    @assert s ≥ 2 "RKC2 requires s ≥ 2 stages"
+
+    eps = 2eta
+    # --- Chebyshev helper values at w0 ---------------------------------------
+    # Shift parameter with damping (w0 = 1 + eps/s^2)
+    w0 = 1 + eps / (s^2)
+
+    # Recurrences to compute T_j(w0), T'_j(w0), T''_j(w0) for j = 0..s
+    T   = zeros(Ty, s+1)     # T_j(w0)
+    Td  = similar(T)                  # T'_j(w0)
+    Tdd = similar(T)                  # T''_j(w0)
+
+    T[1]  = 1         # T0
+    T[2]  = w0        # T1
+    Td[1] = 0         # T0'
+    Td[2] = 1         # T1'
+    Tdd[1]= 0         # T0''
+    Tdd[2]= 0         # T1''
+
+    @inbounds for j in 3:(s+1)
+        # Chebyshev first kind: T_j = 2 x T_{j-1} - T_{j-2}
+        T[j]   = 2*w0*T[j-1] - T[j-2]
+        # Derivatives by differentiating the recurrence
+        Td[j]  = 2*T[j-1] + 2*w0*Td[j-1] - Td[j-2]
+        Tdd[j] = 4*Td[j-1] + 2*w0*Tdd[j-1] - Tdd[j-2]
+    end
+
+    # Indexing note: arrays are 1-based, but our polynomial degree is (j-1)
+    # so T[j] corresponds to T_{j-1}(w0). To read, define a small accessor:
+    Tj(j)   = T[j+1]    # -> T_j(w0)
+    Tdj(j)  = Td[j+1]   # -> T'_j(w0)
+    Tddj(j) = Tdd[j+1]  # -> T''_j(w0)
+
+    # Global scaling for the stability polynomial of degree s:
+    # w1 = T'_s(w0) / T''_s(w0)
+    w1 = Tdj(s) / Tddj(s)
+
+    # --- Coefficients a_j, b_j for internal stage polynomials R_j ------------
+    # For j ≥ 2: b_j = T''_j(w0) / (T'_j(w0))^2  and a_j = 1 - b_j*T_j(w0)
+    b = zeros(Ty, s+1)  # we'll use indices 0..s (store at b[j+1])
+    a = similar(b)
+    μ = similar(b)
+    ν = similar(b)
+    κ = similar(b)
+
+    # Compute b₂ first, then set b₀ = b₁ = b₂ as usually recommended.
+    b2 = Tddj(2) / (Tdj(2)^2)
+    b[1] = b2  # j=0
+    b[2] = b2  # j=1
+    for j in 2:s
+        b[j+1] = Tddj(j) / (Tdj(j)^2)
+    end
+    for j in 0:s
+        a[j+1] = 1 - b[j+1]*Tj(j)
+    end
+
+    # For i = 2..s:
+    # μ_i = 2*b_i*w1 / b_{i-1}
+    # ν_i = 2*b_i*w0 / b_{i-1}
+    # κ_i = - b_i / b_{i-2}
+    for i = 2:s
+        μ[i] = (2*b[1+i]*w1) / b[i]
+        ν[i] = (2*b[1+i]*w0) / b[i]
+        κ[i] = - b[1+i] / b[1+i-2]
+    end
+
+    return RKC2{typeof(f), Ty}(f, Ty(Ts), supersample, s, Ty(eta), a, b, w0, w1, μ, ν, κ)
+end
+
+@inline function _rkc2_choose_stages(stages, L_est, Ts, eta)
+    if stages !== nothing
+        # User provided the number of stages
+        return max(2, stages)
+    elseif L_est !== nothing
+        # Estimate stages based on stability interval
+        # ℓ ≈ 2(1 - 2η/3)m^2
+        c = 2 * (1 - (2/3)*eta)
+        m_float = sqrt(max(0, Ts * float(L_est)) / max(eps(Float64), c)) + 1
+        m = ceil(Int, m_float)
+        return max(2, m)
+    else
+        # Default fallback
+        return 10
+    end
+end
+
+
+function rkc2_step(integ, x, u, p, t, Ts)
+    (; f, stages, a, b, w0, w1, μ, ν, κ) = integ
+    s = stages
+
+    # --- Stage recurrence (van der Houwen–Sommeijer form) --------------------
+    # g₀ = u
+    g_prevprev = x
+    f0 = f(x, u, p, t)
+
+    c_prevprev = 0.0                          # c_0
+    c_prev     = b[2]*w1                     # c_1 (matches g1 construction)
+
+    # g₁ = g₀ + b₁*w1*h*f(g₀)   (with b₁ = b₂)
+    g_prev = x .+ (b[2]*w1*Ts) .* f0
+
+    for i in 2:s
+
+        # gi = x .+ ν[i] .* (g_prev .- x) .+ κ[i] .* (g_prevprev .- x) .+
+        #      (μ[i]*Ts) .* (f(g_prev, u, p, t+(μ[i] + b[2]*w1)*Ts) .- a[i].*f0)
+
+
+        gi = x .+ ν[i] .* (g_prev .- x) .+ κ[i] .* (g_prevprev .- x) .+
+             (μ[i]*Ts) .* (f(g_prev, u, p, t+c_prev*Ts) .- a[i].*f0)
+        ci = ν[i]*c_prev + κ[i]*c_prevprev + μ[i]*(1 - a[i]) 
+        g_prevprev, g_prev = g_prev, gi
+        c_prevprev, c_prev = c_prev, ci
+    end
+
+    return g_prev  # g_s
+end
+
+
+function (integ::RKC2)(x, u, p, t; Ts::Union{Nothing,Real}=nothing)
+    Ts_eff = Ts === nothing ? integ.Ts : Ts
+    h = Ts_eff / integ.supersample
+    @inbounds for k in 1:integ.supersample
+        x = rkc2_step(integ, x, u, p, t + (k-1)*h, h)
+    end
+    return x
+end
+
+
 
 
 end

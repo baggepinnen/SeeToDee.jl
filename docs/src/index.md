@@ -30,6 +30,7 @@ The following methods are available
 - [`SeeToDee.Rk3`](@ref) An explicit 3rd order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
 - [`SeeToDee.Heun`](@ref) An explicit 2nd order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
 - [`SeeToDee.ForwardEuler`](@ref) An explicit 1st order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
+- [`SeeToDee.RKC2`](@ref) A 2nd order stabilized explicit Runge-Kutta-Chebyshev integrator with ZoH input. Supports mildly stiff differential equations with real stiff poles (e.g., parabolic PDEs). If called with StaticArrays, the method is allocation free.
 - [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form $0 = F(ẋ, x, u, p, t)$.
 - [`SeeToDee.Trapezoidal`](@ref) Trapezoidal integration with ZoH input. Supports stiff differential-algebraic equations (DAE).
 - [`SeeToDee.AdaptiveStep`](@ref) A wrapper that enables automatic step subdivision for taking arbitrary-length steps with any integrator. Note: this does not use error control, it only makes sure that the step size never exceeds that of the base integrator, `Ts / supersample`.
