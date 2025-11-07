@@ -8,10 +8,11 @@
 
 ### Integrators
 ```@docs
-SeeToDee.Rk4
-SeeToDee.Rk3
-SeeToDee.Heun
 SeeToDee.ForwardEuler
+SeeToDee.Heun
+SeeToDee.Rk3
+SeeToDee.Rk4
+SeeToDee.RKC2
 SeeToDee.SimpleColloc
 SeeToDee.Trapezoidal
 SeeToDee.AdaptiveStep
