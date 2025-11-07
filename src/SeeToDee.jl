@@ -843,29 +843,22 @@ end
 end
 
 
-function rkc2_step(integ, x, u, p, t, Ts)
+function rkc2_step(integ, x, u, p, t, Ts, args...)
     (; f, stages, a, b, w0, w1, μ, ν, κ) = integ
     s = stages
 
-    # --- Stage recurrence (van der Houwen–Sommeijer form) --------------------
-    # g₀ = u
     g_prevprev = x
-    f0 = f(x, u, p, t)
+    f0 = f(x, u, p, t, args...)
 
-    c_prevprev = 0.0                          # c_0
-    c_prev     = b[2]*w1                     # c_1 (matches g1 construction)
+    c_prevprev = 0.0      # c_0
+    c_prev     = b[2]*w1  # c_1
 
     # g₁ = g₀ + b₁*w1*h*f(g₀)   (with b₁ = b₂)
     g_prev = x .+ (b[2]*w1*Ts) .* f0
 
     for i in 2:s
-
-        # gi = x .+ ν[i] .* (g_prev .- x) .+ κ[i] .* (g_prevprev .- x) .+
-        #      (μ[i]*Ts) .* (f(g_prev, u, p, t+(μ[i] + b[2]*w1)*Ts) .- a[i].*f0)
-
-
         gi = x .+ ν[i] .* (g_prev .- x) .+ κ[i] .* (g_prevprev .- x) .+
-             (μ[i]*Ts) .* (f(g_prev, u, p, t+c_prev*Ts) .- a[i].*f0)
+             (μ[i]*Ts) .* (f(g_prev, u, p, t+c_prev*Ts, args...) .- a[i].*f0)
         ci = ν[i]*c_prev + κ[i]*c_prevprev + μ[i]*(1 - a[i]) 
         g_prevprev, g_prev = g_prev, gi
         c_prevprev, c_prev = c_prev, ci
@@ -875,16 +868,14 @@ function rkc2_step(integ, x, u, p, t, Ts)
 end
 
 
-function (integ::RKC2)(x, u, p, t; Ts::Union{Nothing,Real}=nothing)
+function (integ::RKC2)(x, u, p, t, args...; Ts::Union{Nothing,Real}=nothing)
     Ts_eff = Ts === nothing ? integ.Ts : Ts
     h = Ts_eff / integ.supersample
     @inbounds for k in 1:integ.supersample
-        x = rkc2_step(integ, x, u, p, t + (k-1)*h, h)
+        x = rkc2_step(integ, x, u, p, t + (k-1)*h, h, args...)
     end
     return x
 end
-
-
 
 
 end
