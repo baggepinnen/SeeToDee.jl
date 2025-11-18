@@ -15,7 +15,9 @@ SeeToDee.Rk4
 SeeToDee.RKC2
 SeeToDee.SimpleColloc
 SeeToDee.Trapezoidal
+SeeToDee.BackwardEuler
 SeeToDee.AdaptiveStep
+SeeToDee.SuperSampler
 SeeToDee.SwitchingIntegrator
 ```
 ### Utilities
