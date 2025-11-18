@@ -32,8 +32,10 @@ The following methods are available
 - [`SeeToDee.ForwardEuler`](@ref) An explicit 1st order Runge-Kutta integrator with ZoH input. Supports non-stiff differential equations only. If called with StaticArrays, this method is allocation free.
 - [`SeeToDee.RKC2`](@ref) A 2nd order stabilized explicit Runge-Kutta-Chebyshev integrator with ZoH input. Supports mildly stiff differential equations with real stiff poles (e.g., parabolic PDEs). If called with StaticArrays, the method is allocation free.
 - [`SeeToDee.SimpleColloc`](@ref) A [textbook](https://www.equalsharepress.com/media/NMFSC.pdf) implementation of a direct collocation method with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form $0 = F(ẋ, x, u, p, t)$.
-- [`SeeToDee.Trapezoidal`](@ref) Trapezoidal integration with ZoH input. Supports stiff differential-algebraic equations (DAE).
+- [`SeeToDee.Trapezoidal`](@ref) Trapezoidal integration with ZoH input. Supports stiff differential-algebraic equations (DAE). Second-order accurate and A-stable.
+- [`SeeToDee.BackwardEuler`](@ref) Backward Euler integration with ZoH input. Supports stiff differential-algebraic equations (DAE) and fully implicit form. First-order accurate and unconditionally stable (A-stable), simpler than Trapezoidal but requires smaller steps or supersampling for accuracy.
 - [`SeeToDee.AdaptiveStep`](@ref) A wrapper that enables automatic step subdivision for taking arbitrary-length steps with any integrator. Note: this does not use error control, it only makes sure that the step size never exceeds that of the base integrator, `Ts / supersample`.
+- [`SeeToDee.SuperSampler`](@ref) A wrapper that enables supersampling for integrators without built-in supersample support (like `Trapezoidal`, `BackwardEuler`, `SimpleColloc`). Takes multiple internal steps to improve accuracy.
 - [`SeeToDee.SwitchingIntegrator`](@ref) A wrapper that switches between two different integrators based on a user-defined condition. Useful for adaptive selection of integration methods based on state, time, or parameters.
 
 See their docstrings for more details.
@@ -144,6 +146,27 @@ x1_implicit = discrete_dynamics_implicit(x0, u0, p, 0)
 @btime $discrete_dynamics_implicit($x0, $u0, 0, 0); # 21.911 μs (84 allocations: 50.39 KiB)
 ```
 For this system, the solve time is almost identical to the explicit collocation case, but for larger systems, the implicit form can be faster.
+
+### Using SuperSampler for improved accuracy
+The `SuperSampler` wrapper allows integrators without built-in supersample support (like `Trapezoidal`, `BackwardEuler`, `SimpleColloc`) to take multiple internal steps for improved accuracy:
+
+```@example STEP
+base_backeuler = SeeToDee.BackwardEuler(cartpole, Ts, nx, na, nu)
+
+# Wrap it with SuperSampler to take 10 internal steps
+supersampled_backeuler = SeeToDee.SuperSampler(base_backeuler, 10)
+
+x1_super = supersampled_backeuler(x0, u0, p, 0)
+
+# This is equivalent to manually stepping 10 times with Ts/10
+x_manual_be = x0
+for i in 1:10
+    global x_manual_be
+    x_manual_be = base_backeuler(x_manual_be, u0, p, (i-1)*Ts/10; Ts=Ts/10)
+end
+
+@test x1_super ≈ x_manual_be rtol=1e-8
+```
 
 ### Using AdaptiveStep for arbitrary step sizes
 The `AdaptiveStep` wrapper allows you to take arbitrary step sizes with any integrator by automatically subdividing large steps:
