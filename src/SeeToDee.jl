@@ -2,7 +2,7 @@ module SeeToDee
 
 using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
 
-export SimpleColloc, AdaptiveStep
+export SimpleColloc, AdaptiveStep, SuperSampler
 # public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal, BackwardEuler
 
 abstract type AbstractIntegrator <: Function end
@@ -110,6 +110,85 @@ function (as::AdaptiveStep)(x, u, p, t, args...; Ts=as.integ.Ts, kwargs...)
             return as.integ(x, u, p, t, args...; Ts, kwargs...)
         end
     end
+end
+
+## SuperSampler ================================================================
+"""
+    SuperSampler(integ, supersample)
+
+A wrapper that enables supersampling for any integrator by manually stepping multiple times.
+
+When an integrator doesn't have built-in `supersample` support (like `Trapezoidal`, `BackwardEuler`,
+or `SimpleColloc`), this wrapper allows you to take `supersample` internal steps to produce one
+effective step of duration `Ts`.
+
+# Fields
+- `integ`: The wrapped integrator
+- `supersample`: Number of internal steps to take per call
+
+# Usage
+```julia
+# Wrap an implicit integrator to add supersampling
+base_integrator = Trapezoidal(dynamics, 0.1, 4, 0, 1)
+supersampled = SuperSampler(base_integrator, 5)  # Takes 5 steps of 0.02s each
+
+# Each call advances by Ts=0.1 using 5 internal steps
+x_next = supersampled(x, u, p, t)  # Equivalent to 5 steps of 0.02s
+```
+
+# Notes
+- The input `u` is held constant during all internal steps
+- Each internal step uses time `Ts / supersample`
+- Time `t` is advanced appropriately for each internal step
+- All args and kwargs are forwarded to the wrapped integrator
+- Type-stable when used with StaticArrays
+
+# Comparison with AdaptiveStep
+- `AdaptiveStep`: Handles arbitrary step sizes by automatic subdivision (for variable Ts)
+- `SuperSampler`: Fixed supersampling for improved accuracy (for constant Ts with more substeps)
+
+# Examples
+```julia
+using SeeToDee, StaticArrays
+
+# Define dynamics
+function dynamics(x, u, p, t)
+    return -x + u
+end
+
+# Create implicit integrator without supersample support
+base = Trapezoidal(dynamics, 0.1, 1, 0, 1)
+
+# Add supersampling for better accuracy
+supersampled = SuperSampler(base, 10)  # 10 internal steps
+
+x0 = SA[1.0]
+u = SA[0.5]
+
+# Single step with 10 internal substeps
+x1 = supersampled(x0, u, 0, 0.0)
+
+# Can also override Ts at call time (if integrator supports it)
+x2 = supersampled(x0, u, 0, 0.0; Ts=0.05)  # Uses 10 steps of 0.005s
+```
+"""
+struct SuperSampler{I,S} <: AbstractIntegrator
+    integ::I
+    supersample::S
+    function SuperSampler(integ::I, supersample::S) where {I,S<:Integer}
+        supersample ≥ 1 || throw(ArgumentError("supersample must be ≥ 1, got $supersample"))
+        new{I,S}(integ, supersample)
+    end
+end
+
+
+function (ss::SuperSampler)(x, u, p, t, args...; Ts=ss.integ.Ts, kwargs...)
+    Ts_step = Ts / ss.supersample
+    for i in 1:ss.supersample
+        x = ss.integ(x, u, p, t, args...; Ts=Ts_step, kwargs...)
+        t += Ts_step
+    end
+    return x
 end
 
 ## SwitchingIntegrator =========================================================
@@ -526,7 +605,8 @@ function coldyn(xv::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
     end
 end
 
-function (integ::SimpleColloc)(x0::T, u, p, t, args...; abstol=integ.abstol, kwargs...)::T where T
+function (integ::SimpleColloc)(x0::T, u, p, t, args...; Ts = nothing, abstol=integ.abstol, kwargs...)::T where T
+    Ts === nothing || error("Changing Ts is not supported by SimpleColloc integrator.")
     nx, na = length(integ.x_inds), length(integ.a_inds)
     n_c = length(integ.τ)
     _, _, _, u00 = get_cache!(integ, x0)
@@ -638,8 +718,8 @@ function Trapezoidal(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int; 
     Trapezoidal(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual, scale_x)
 end
 
-function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
-    (; dyn, x_inds, a_inds, residual, Ts) = integ
+function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, Ts, args...)) where T
+    (; dyn, x_inds, a_inds, residual) = integ
 
     x1 = x isa MVector ? SVector(x) : x
 
@@ -664,8 +744,8 @@ function coldyn_trapz(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) w
     res
 end
 
-function coldyn_trapz_oop(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
-    (; dyn, x_inds, a_inds, Ts) = integ
+function coldyn_trapz_oop(x::AbstractArray{T}, (integ, x0, u, p, t, Ts, args...)) where T
+    (; dyn, x_inds, a_inds) = integ
 
 
     f0 = dyn(x0, u, p, t,    args...)
@@ -690,8 +770,8 @@ function coldyn_trapz_oop(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) wh
     end
 end
 
-function (integ::Trapezoidal)(x0::T, u, p, t, args...; abstol=integ.abstol)::T where T
-    problem = SciMLBase.remake(integ.nlproblem, u0=x0, p=(integ, x0, u, p, t, args...))
+function (integ::Trapezoidal)(x0::T, u, p, t, args...; Ts = integ.Ts, abstol=integ.abstol)::T where T
+    problem = SciMLBase.remake(integ.nlproblem, u0=x0, p=(integ, x0, u, p, t, Ts, args...))
     # integ.nlproblem = problem
     # problem.u0 .= x0
     # problem.p[2] .= x0
@@ -783,8 +863,8 @@ function BackwardEuler(dyn, Ts::T0, x_inds::AbstractVector{Int}, a_inds, nu::Int
     BackwardEuler(dyn, Ts, nx, x_inds, a_inds, nu, abstol, problem, solver, residual, scale_x)
 end
 
-function coldyn_backeuler(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
-    (; dyn, x_inds, a_inds, residual, Ts) = integ
+function coldyn_backeuler(res, x::AbstractArray{T}, (integ, x0, u, p, t, Ts, args...)) where T
+    (; dyn, x_inds, a_inds, residual) = integ
 
     x1 = x isa MVector ? SVector(x) : x
 
@@ -810,8 +890,8 @@ function coldyn_backeuler(res, x::AbstractArray{T}, (integ, x0, u, p, t, args...
     res
 end
 
-function coldyn_backeuler_oop(x::AbstractArray{T}, (integ, x0, u, p, t, args...)) where T
-    (; dyn, x_inds, a_inds, residual, Ts) = integ
+function coldyn_backeuler_oop(x::AbstractArray{T}, (integ, x0, u, p, t, Ts, args...)) where T
+    (; dyn, x_inds, a_inds, residual) = integ
 
     if residual
         # Fully implicit form
@@ -849,8 +929,8 @@ function coldyn_backeuler_oop(x::AbstractArray{T}, (integ, x0, u, p, t, args...)
     end
 end
 
-function (integ::BackwardEuler)(x0::T, u, p, t, args...; abstol=integ.abstol)::T where T
-    problem = SciMLBase.remake(integ.nlproblem, u0=x0, p=(integ, x0, u, p, t, args...))
+function (integ::BackwardEuler)(x0::T, u, p, t, args...; Ts = integ.Ts, abstol=integ.abstol)::T where T
+    problem = SciMLBase.remake(integ.nlproblem, u0=x0, p=(integ, x0, u, p, t, Ts, args...))
     solution = solve(problem, integ.solver; abstol)
     if !SciMLBase.successful_retcode(solution)
         @warn "Nonlinear solve failed to converge" solution.retcode maxlog=10

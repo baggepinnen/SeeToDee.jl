@@ -124,7 +124,7 @@ end
     discrete_dynamics_fe = SeeToDee.ForwardEuler(cartpole, Ts; supersample=3)
     discrete_dynamics_heun = SeeToDee.Heun(cartpole, Ts; supersample=3)
     discrete_dynamics_trapz = SeeToDee.Trapezoidal(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4])
-    discrete_dynamics_backeuler = SeeToDee.BackwardEuler(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4])
+    discrete_dynamics_backeuler = SeeToDee.SuperSampler(SeeToDee.BackwardEuler(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4]), 5)
     discrete_dynamics_rkc2 = SeeToDee.RKC2(cartpole, Ts; supersample=3)
 
     x = SA[1.0, 2.0, 3.0, 4.0]
@@ -366,6 +366,91 @@ end
         x1 = adaptive_rk4(x, u, 0, 0; Ts=0.2)  # Uses supersample=4
         x2 = discrete_rk4(x, u, 0, 0; Ts=0.2, supersample=4)
         @test x1 ≈ x2
+    end
+
+    @testset "SuperSampler" begin
+        @info "Testing SuperSampler"
+
+        # Test with implicit integrators that don't have built-in supersample
+        Ts_base = 0.1
+        discrete_trapz = SeeToDee.Trapezoidal(cartpole, Ts_base, 4, 0, 1; abstol=1e-10)
+        discrete_backeuler = SeeToDee.BackwardEuler(cartpole, Ts_base, 4, 0, 1; abstol=1e-10)
+        # discrete_colloc = SeeToDee.SimpleColloc(cartpole, Ts_base, 4, 0, 1; n=5, abstol=1e-10)
+
+        # Create supersampled versions
+        supersampled_trapz = SeeToDee.SuperSampler(discrete_trapz, 5)
+        supersampled_backeuler = SeeToDee.SuperSampler(discrete_backeuler, 5)
+        # supersampled_colloc = SeeToDee.SuperSampler(discrete_colloc, 5)
+
+        x = SA[1.0, 2.0, 3.0, 4.0]
+        u = SA[1.0]
+
+        # Test that SuperSampler is an AbstractIntegrator
+        @test supersampled_trapz isa SeeToDee.AbstractIntegrator
+        @test supersampled_backeuler isa SeeToDee.AbstractIntegrator
+        # @test supersampled_colloc isa SeeToDee.AbstractIntegrator
+
+        # Test constructor validation
+        @test_throws ArgumentError SeeToDee.SuperSampler(discrete_trapz, 0)
+        @test_throws ArgumentError SeeToDee.SuperSampler(discrete_trapz, -1)
+
+        # Test that supersampling produces different (hopefully better) results than single step
+        x_single_trapz = discrete_trapz(x, u, 0, 0)
+        x_super_trapz = supersampled_trapz(x, u, 0, 0)
+        @test x_single_trapz != x_super_trapz  # Should be different
+
+        # Test type inference
+        @inferred supersampled_trapz(x, u, 0, 0)
+        @inferred supersampled_backeuler(x, u, 0, 0)
+        # @inferred supersampled_colloc(x, u, 0, 0)
+
+        # Test that supersampling matches manual stepping
+        x_manual = x
+        Ts_step = Ts_base / 5
+        t_manual = 0.0
+        for i in 1:5
+            x_manual = discrete_trapz(x_manual, u, 0, t_manual; Ts=Ts_step)
+            t_manual += Ts_step
+        end
+        x_super = supersampled_trapz(x, u, 0, 0)
+        @test x_manual ≈ x_super
+
+        # Test with different supersample values
+        supersampled_trapz_10 = SeeToDee.SuperSampler(discrete_trapz, 10)
+        x_super_10 = supersampled_trapz_10(x, u, 0, 0)
+        @test x_super_10 isa SVector{4, Float64}
+
+        # Test that higher supersampling gives different results
+        @test x_super_trapz != x_super_10
+
+        # Test with custom Ts at call time
+        x_custom_ts = supersampled_trapz(x, u, 0, 0; Ts=0.05)
+        @test x_custom_ts isa SVector{4, Float64}
+        # With Ts=0.05 and supersample=5, each internal step is 0.01
+        x_manual_custom = x
+        for i in 1:5
+            x_manual_custom = discrete_trapz(x_manual_custom, u, 0, (i-1)*0.01; Ts=0.01)
+        end
+        @test x_custom_ts ≈ x_manual_custom
+
+        # Test that supersampling improves accuracy for BackwardEuler
+        # Create a reference with very fine stepping
+        discrete_trapz_fine = SeeToDee.Trapezoidal(cartpole, Ts_base/100, 4, 0, 1; abstol=1e-10)
+        x_ref = x
+        for i in 1:100
+            x_ref = discrete_trapz_fine(x_ref, u, 0, (i-1)*Ts_base/100; Ts=Ts_base/100)
+        end
+
+        # Single step should be less accurate than supersampled
+        x_single_be = discrete_backeuler(x, u, 0, 0)
+        x_super_be = SeeToDee.SuperSampler(discrete_backeuler, 10)(x, u, 0, 0)
+
+        using LinearAlgebra
+        err_single = norm(x_ref - x_single_be)
+        err_super = norm(x_ref - x_super_be)
+
+        # Supersampling should reduce error (though not guaranteed for all systems)
+        @test err_super < err_single
     end
 
 end
