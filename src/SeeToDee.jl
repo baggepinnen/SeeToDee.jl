@@ -524,7 +524,7 @@ A Gauss-Radau collocation method is used to discretize the dynamics. The resulti
 - `scale_x`: If provided, the state variables are scaled by this vector before being passed to the nonlinear solver. This can improve convergence for states with very different magnitudes. The scaling is applied as `res .= res ./ scale_x` before being passed to the solver.
 
 # Extended help
-- Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
+- Super-sampling is not supported by this integrator, see [`SeeToDee.SuperSampler`](@ref).
 """
 function SimpleColloc(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0 <: Real
     x_inds = 1:nx
@@ -695,7 +695,7 @@ The returned function has the signature `f_discrete : (x,u,p,t)->x(t+Tₛ)`.
 - `scale_x`: If provided, the residual is scaled by this vector before being passed to the nonlinear solver, `res ./ scale_x`. This can help with convergence if the state variables have very different magnitudes.
 
 # Extended help
-- Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
+- Super-sampling is not supported by this integrator, see [`SeeToDee.SuperSampler`](@ref).
 """
 function Trapezoidal(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0 <: Real
     x_inds = 1:nx
@@ -840,7 +840,7 @@ x(t+Tₛ) = x(t) + Tₛ \\cdot f(x(t+Tₛ), u, p, t+Tₛ)
 This requires solving a nonlinear system at each step, but provides better stability properties than explicit methods like ForwardEuler, especially for stiff dynamics. It is simpler and cheaper per iteration than Trapezoidal (only one dynamics evaluation per solve vs. two), but is only first-order accurate compared to Trapezoidal's second-order accuracy.
 
 # Extended help
-- Super-sampling is not supported by this integrator, but you can trivially wrap it in a function that does super-sampling by stepping `supersample` times in a loop with the same input and sample time `Ts / supersample`.
+- Super-sampling is not supported by this integrator, see [`SeeToDee.SuperSampler`](@ref).
 """
 function BackwardEuler(dyn, Ts::T0, nx::Int, na::Int, args...; kwargs...) where T0 <: Real
     x_inds = 1:nx
@@ -876,7 +876,7 @@ function coldyn_backeuler(res, x::AbstractArray{T}, (integ, x0, u, p, t, Ts, arg
         res .= res_temp
     else
         # Standard form: f(x, u, p, t) -> ẋ
-        f1 = dyn(x1, u, p, t+Ts, args...)
+        f1 = dyn(x1, u, p, t+Ts, args...) # We can get significantly more accurate w.r.t. intergation of time dependent functions by evaluating at t+Ts/2 instead of t+Ts
         if isempty(a_inds)
             res .= x0 .- x1 .+ Ts .* f1
         else
