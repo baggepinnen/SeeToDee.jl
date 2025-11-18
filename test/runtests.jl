@@ -124,7 +124,12 @@ end
     discrete_dynamics_fe = SeeToDee.ForwardEuler(cartpole, Ts; supersample=3)
     discrete_dynamics_heun = SeeToDee.Heun(cartpole, Ts; supersample=3)
     discrete_dynamics_trapz = SeeToDee.Trapezoidal(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4])
+    
     discrete_dynamics_backeuler = SeeToDee.SuperSampler(SeeToDee.BackwardEuler(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4]), 5)
+    discrete_dynamics_backeuler_implicit = SeeToDee.SuperSampler(SeeToDee.BackwardEuler(cartpole_implicit, Ts, 4, 0, 1; abstol=1e-10, residual=true, scale_x=[1,2,3,4]), 5)
+    
+    discrete_dynamics_backeuler_oop = SeeToDee.SuperSampler(SeeToDee.BackwardEuler(cartpole, Ts, 4, 0, 1; abstol=1e-10, residual=false, scale_x=[1,2,3,4], inplace=false), 5)
+    discrete_dynamics_backeuler_implicit_oop = SeeToDee.SuperSampler(SeeToDee.BackwardEuler(cartpole_implicit, Ts, 4, 0, 1; abstol=1e-10, residual=true, scale_x=[1,2,3,4], inplace=false), 5)
     discrete_dynamics_rkc2 = SeeToDee.RKC2(cartpole, Ts; supersample=3)
 
     x = SA[1.0, 2.0, 3.0, 4.0]
@@ -139,6 +144,7 @@ end
     @inferred discrete_dynamics_heun(x, u, 0, 0)
     @inferred discrete_dynamics_trapz(x, u, 0, 0)
     @inferred discrete_dynamics_backeuler(x, u, 0, 0)
+    @inferred discrete_dynamics_backeuler_implicit(x, u, 0, 0)
     @inferred discrete_dynamics_rkc2(x, u, 0, 0)
 
 
@@ -176,6 +182,9 @@ end
     x8 = discrete_dynamics_trapz(x, u, 0, 0)
     x9 = discrete_dynamics_rkc2(x, u, 0, 0)
     x10 = discrete_dynamics_backeuler(x, u, 0, 0)
+    x11 = discrete_dynamics_backeuler_implicit(x, u, 0, 0)
+    x12 = discrete_dynamics_backeuler_oop(x, u, 0, 0)
+    x13 = discrete_dynamics_backeuler_implicit_oop(x, u, 0, 0)
 
     @test x1 ≈ x2 atol=1e-9
     @test x1 ≈ x3 atol=2e-3
@@ -186,6 +195,9 @@ end
     @test x1 ≈ x8 rtol=5e-2
     @test x1 ≈ x9 rtol=4e-3
     @test x1 ≈ x10 rtol=5e-2
+    @test x1 ≈ x11 rtol=5e-2
+    @test x1 ≈ x12 rtol=5e-2
+    @test x1 ≈ x13 rtol=5e-2
 
     # using BenchmarkTools
     # @btime $discrete_dynamics($x, $u, 0, 0);
