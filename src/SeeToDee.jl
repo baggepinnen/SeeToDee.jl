@@ -510,16 +510,13 @@ function (integ::ETDRK2)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.sup
         throw(ArgumentError("ETDRK2: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
     (; f, linop, h, E, hφ₁, hφ₂) = integ
     N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
-    k1 = N(x, t)
-    a  = E * x + hφ₁ * k1
-    k2 = N(a, t + h)
-    y  = a + hφ₂ * (k2 - k1)
-    for _ in 2:supersample
-        t += h
+    y = x
+    for _ in 1:supersample
         k1 = N(y, t)
         a  = E * y + hφ₁ * k1
         k2 = N(a, t + h)
         y  = a + hφ₂ * (k2 - k1)
+        t += h
     end
     return y
 end
@@ -586,20 +583,15 @@ function (integ::ETDRK3)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.sup
         throw(ArgumentError("ETDRK3: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
     (; f, linop, h, E, E2, h2φ₁₂, h2φ₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
     N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
-    k1 = N(x, t)
-    u2 = E2 * x + h2φ₁₂ * k1
-    k2 = N(u2, t + h/2)
-    u3 = E * x + hφ₁m2φ₂ * k1 + h2φ₂ * k2
-    k3 = N(u3, t + h)
-    y  = E * x + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
-    for _ in 2:supersample
-        t += h
+    y = x
+    for _ in 1:supersample
         k1 = N(y, t)
         u2 = E2 * y + h2φ₁₂ * k1
         k2 = N(u2, t + h/2)
         u3 = E * y + hφ₁m2φ₂ * k1 + h2φ₂ * k2
         k3 = N(u3, t + h)
         y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
+        t += h
     end
     return y
 end
@@ -668,16 +660,8 @@ function (integ::ETDRK4)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.sup
         throw(ArgumentError("ETDRK4: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
     (; f, linop, h, E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
     N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
-    k1 = N(x, t)
-    u2 = E2 * x  + h2φ₁₂ * k1
-    k2 = N(u2, t + h/2)
-    u3 = E2 * x  + h2φ₁₂ * k2
-    k3 = N(u3, t + h/2)
-    u4 = E2 * u2 + h2φ₁₂ * (2 .* k3 .- k1)
-    k4 = N(u4, t + h)
-    y  = E * x + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
-    for _ in 2:supersample
-        t += h
+    y = x
+    for _ in 1:supersample
         k1 = N(y, t)
         u2 = E2 * y  + h2φ₁₂ * k1
         k2 = N(u2, t + h/2)
@@ -686,6 +670,7 @@ function (integ::ETDRK4)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.sup
         u4 = E2 * u2 + h2φ₁₂ * (2 .* k3 .- k1)
         k4 = N(u4, t + h)
         y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
+        t += h
     end
     return y
 end
