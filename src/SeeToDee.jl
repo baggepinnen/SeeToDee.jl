@@ -3,7 +3,7 @@ module SeeToDee
 using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
 
 export SimpleColloc, AdaptiveStep, SuperSampler
-# public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal, BackwardEuler
+# public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal, BackwardEuler, ETDRK2, ETDRK3, ETDRK4
 
 abstract type AbstractIntegrator <: Function end
 
@@ -431,6 +431,258 @@ function _inner_heun(integ::Heun{F}, f1, x, u, p, t, args...; Ts=integ.Ts, super
         f2 = f(y .+ Ts2 .* f1, u, p, t + Ts2, args...)
         add = (Ts2 / 2) .* (f1 .+ f2)
         y += add
+    end
+    return y
+end
+
+## Exponential RK methods ======================================================
+
+"""
+    _phi_functions(Lh::AbstractMatrix, kmax::Int)
+
+Compute matrix φ-functions φ₀(Lh), φ₁(Lh), ..., φ_kmax(Lh) using the augmented matrix method.
+
+Returns a vector `[φ₀(Lh), φ₁(Lh), ..., φ_kmax(Lh)]` where:
+- `φ₀(z) = exp(z)`
+- `φₖ(z) = (φₖ₋₁(z) - I/(k-1)!) / z`  for k ≥ 1
+
+Uses the block upper-triangular augmented matrix whose exponential encodes all φ functions simultaneously.
+"""
+function _phi_functions(Lh::AbstractMatrix, kmax::Int)
+    n = size(Lh, 1)
+    T = eltype(Lh)
+    M = zeros(T, n * (kmax + 1), n * (kmax + 1))
+    M[1:n, 1:n] .= Lh
+    for k in 1:kmax
+        row = (k - 1) * n + 1
+        col = k * n + 1
+        for i in 1:n
+            M[row + i - 1, col + i - 1] = one(T)
+        end
+    end
+    expM = exp(M)
+    [expM[1:n, k*n+1:(k+1)*n] for k in 0:kmax]
+end
+
+## ETDRK2 ======================================================================
+
+"""
+    f_discrete = ETDRK2(f, L, Ts; supersample = 1)
+
+Discretize a semilinear continuous-time dynamics function using a 2nd-order exponential
+Runge-Kutta method (ETD2RK, Cox & Matthews 2002) with sample time `Tₛ`.
+
+The dynamics are assumed to have the form `ẋ = L*x + N(x, u, p, t)` where `L` is a
+constant linear operator (matrix). Only `f` (the full dynamics `f : (x,u,p,t)->ẋ`) and
+`L` need to be provided; the nonlinear remainder `N = f(x,u,p,t) - L*x` is computed
+internally.
+
+The matrix exponential `exp(L*h)` and φ-functions are precomputed once at construction
+for the substep size `h = Ts / supersample`.
+
+Exponential integrators exploit the exact linear solution, making them well-suited for
+semilinear stiff systems where the stiffness originates from `L`.
+
+# Algorithm
+```
+k₁ = N(xₙ, tₙ)
+a  = exp(hL)·xₙ + h·φ₁(hL)·k₁
+k₂ = N(a, tₙ + h)
+xₙ₊₁ = a + h·φ₂(hL)·(k₂ - k₁)
+```
+"""
+struct ETDRK2{F,LT,T,M} <: AbstractIntegrator
+    f::F
+    linop::LT
+    Ts::T
+    supersample::Int
+    h::T
+    E::M    # exp(Lh)
+    hφ₁::M  # h · φ₁(Lh)
+    hφ₂::M  # h · φ₂(Lh)
+end
+
+function ETDRK2(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
+    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    h = float(Ts) / supersample
+    Lh = float.(L) * h
+    phis = _phi_functions(Lh, 2)  # [φ₀, φ₁, φ₂]
+    ETDRK2(f, float.(L), typeof(h)(Ts), supersample, h, phis[1], h .* phis[2], h .* phis[3])
+end
+
+function (integ::ETDRK2)(x, u, p, t, args...)
+    (; f, linop, supersample, h, E, hφ₁, hφ₂) = integ
+    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
+    k1 = N(x, t)
+    a  = E * x + hφ₁ * k1
+    k2 = N(a, t + h)
+    y  = a + hφ₂ * (k2 - k1)
+    for _ in 2:supersample
+        t += h
+        k1 = N(y, t)
+        a  = E * y + hφ₁ * k1
+        k2 = N(a, t + h)
+        y  = a + hφ₂ * (k2 - k1)
+    end
+    return y
+end
+
+## ETDRK3 ======================================================================
+
+"""
+    f_discrete = ETDRK3(f, L, Ts; supersample = 1)
+
+Discretize a semilinear continuous-time dynamics function using a 3rd-order exponential
+Runge-Kutta method (Krogstad 2005) with sample time `Tₛ`.
+
+See [`ETDRK2`](@ref) for details on the interface and semilinear structure.
+
+# Algorithm
+```
+k₁ = N(xₙ, tₙ)
+u₂ = exp(hL/2)·xₙ + (h/2)·φ₁(hL/2)·k₁
+k₂ = N(u₂, tₙ + h/2)
+u₃ = exp(hL)·xₙ + h·(φ₁(hL) - 2φ₂(hL))·k₁ + 2h·φ₂(hL)·k₂
+k₃ = N(u₃, tₙ + h)
+xₙ₊₁ = exp(hL)·xₙ + h·(φ₁ - 3φ₂ + 4φ₃)·k₁ + h·(4φ₂ - 8φ₃)·k₂ + h·(-φ₂ + 4φ₃)·k₃
+```
+"""
+struct ETDRK3{F,LT,T,M} <: AbstractIntegrator
+    f::F
+    linop::LT
+    Ts::T
+    supersample::Int
+    h::T
+    E::M     # exp(Lh)
+    E2::M    # exp(Lh/2)
+    hφ₁::M  # h · φ₁(Lh)
+    h2φ₁₂::M # (h/2) · φ₁(Lh/2)
+    hφ₂::M  # h · φ₂(Lh)
+    hφ₃::M  # h · φ₃(Lh)
+    # Precomputed stage/update coefficient combinations
+    hφ₁m2φ₂::M   # h · (φ₁(Lh) - 2φ₂(Lh))
+    hφ₁m3φ₂p4φ₃::M  # h · (φ₁ - 3φ₂ + 4φ₃)
+    h4φ₂m8φ₃::M     # h · (4φ₂ - 8φ₃)
+    hmφ₂p4φ₃::M     # h · (-φ₂ + 4φ₃)
+end
+
+function ETDRK3(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
+    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    h = float(Ts) / supersample
+    Lf = float.(L)
+    phis  = _phi_functions(Lf * h,       3)  # [φ₀, φ₁, φ₂, φ₃] at h
+    phis2 = _phi_functions(Lf * (h / 2), 1)  # [φ₀, φ₁] at h/2
+    E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
+    E2, φ₁₂ = phis2[1], phis2[2]
+    ETDRK3(f, Lf, typeof(h)(Ts), supersample, h,
+        E, E2,
+        h .* φ₁, (h/2) .* φ₁₂, h .* φ₂, h .* φ₃,
+        h .* (φ₁ .- 2 .* φ₂),
+        h .* (φ₁ .- 3 .* φ₂ .+ 4 .* φ₃),
+        h .* (4 .* φ₂ .- 8 .* φ₃),
+        h .* (.- φ₂ .+ 4 .* φ₃))
+end
+
+function (integ::ETDRK3)(x, u, p, t, args...)
+    (; f, linop, supersample, h, E, E2, h2φ₁₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
+    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
+    k1 = N(x, t)
+    u2 = E2 * x + h2φ₁₂ * k1
+    k2 = N(u2, t + h/2)
+    u3 = E * x + hφ₁m2φ₂ * k1 + 2 .* (integ.hφ₂ * k2)
+    k3 = N(u3, t + h)
+    y  = E * x + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
+    for _ in 2:supersample
+        t += h
+        k1 = N(y, t)
+        u2 = E2 * y + h2φ₁₂ * k1
+        k2 = N(u2, t + h/2)
+        u3 = E * y + hφ₁m2φ₂ * k1 + 2 .* (integ.hφ₂ * k2)
+        k3 = N(u3, t + h)
+        y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
+    end
+    return y
+end
+
+## ETDRK4 ======================================================================
+
+"""
+    f_discrete = ETDRK4(f, L, Ts; supersample = 1)
+
+Discretize a semilinear continuous-time dynamics function using a 4th-order exponential
+Runge-Kutta method (ETD4RK, Cox & Matthews 2002) with sample time `Tₛ`.
+
+See [`ETDRK2`](@ref) for details on the interface and semilinear structure.
+
+In the limit `L → 0`, this method reduces to classical RK4.
+
+# Algorithm
+```
+k₁ = N(xₙ, tₙ)
+u₂ = exp(hL/2)·xₙ + (h/2)·φ₁(hL/2)·k₁
+k₂ = N(u₂, tₙ + h/2)
+u₃ = exp(hL/2)·xₙ + (h/2)·φ₁(hL/2)·k₂
+k₃ = N(u₃, tₙ + h/2)
+u₄ = exp(hL/2)·u₂ + (h/2)·φ₁(hL/2)·(2k₃ - k₁)
+k₄ = N(u₄, tₙ + h)
+xₙ₊₁ = exp(hL)·xₙ + h·(φ₁ - 3φ₂ + 4φ₃)·k₁ + 2h·(φ₂ - 2φ₃)·(k₂ + k₃) + h·(-φ₂ + 4φ₃)·k₄
+```
+"""
+struct ETDRK4{F,LT,T,M} <: AbstractIntegrator
+    f::F
+    linop::LT
+    Ts::T
+    supersample::Int
+    h::T
+    E::M     # exp(Lh)
+    E2::M    # exp(Lh/2)
+    hφ₁::M  # h · φ₁(Lh)
+    h2φ₁₂::M # (h/2) · φ₁(Lh/2)
+    hφ₂::M  # h · φ₂(Lh)
+    hφ₃::M  # h · φ₃(Lh)
+    # Precomputed update coefficient combinations
+    hφ₁m3φ₂p4φ₃::M  # h · (φ₁ - 3φ₂ + 4φ₃)
+    h2φ₂m4φ₃::M     # 2h · (φ₂ - 2φ₃)
+    hmφ₂p4φ₃::M     # h · (-φ₂ + 4φ₃)
+end
+
+function ETDRK4(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
+    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    h = float(Ts) / supersample
+    Lf = float.(L)
+    phis  = _phi_functions(Lf * h,       3)  # [φ₀, φ₁, φ₂, φ₃] at h
+    phis2 = _phi_functions(Lf * (h / 2), 1)  # [φ₀, φ₁] at h/2
+    E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
+    E2, φ₁₂ = phis2[1], phis2[2]
+    ETDRK4(f, Lf, typeof(h)(Ts), supersample, h,
+        E, E2,
+        h .* φ₁, (h/2) .* φ₁₂, h .* φ₂, h .* φ₃,
+        h .* (φ₁ .- 3 .* φ₂ .+ 4 .* φ₃),
+        2h .* (φ₂ .- 2 .* φ₃),
+        h .* (.- φ₂ .+ 4 .* φ₃))
+end
+
+function (integ::ETDRK4)(x, u, p, t, args...)
+    (; f, linop, supersample, h, E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
+    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
+    k1 = N(x, t)
+    u2 = E2 * x  + h2φ₁₂ * k1
+    k2 = N(u2, t + h/2)
+    u3 = E2 * x  + h2φ₁₂ * k2
+    k3 = N(u3, t + h/2)
+    u4 = E2 * u2 + h2φ₁₂ * (2 .* k3 .- k1)
+    k4 = N(u4, t + h)
+    y  = E * x + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
+    for _ in 2:supersample
+        t += h
+        k1 = N(y, t)
+        u2 = E2 * y  + h2φ₁₂ * k1
+        k2 = N(u2, t + h/2)
+        u3 = E2 * y  + h2φ₁₂ * k2
+        k3 = N(u3, t + h/2)
+        u4 = E2 * u2 + h2φ₁₂ * (2 .* k3 .- k1)
+        k4 = N(u4, t + h)
+        y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
     end
     return y
 end
