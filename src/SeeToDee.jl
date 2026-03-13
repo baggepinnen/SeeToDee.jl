@@ -504,14 +504,17 @@ end
 
 function ETDRK2(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
     supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
     h = float(Ts) / supersample
     Lh = float.(L) * h
     phis = _phi_functions(Lh, 2)  # [φ₀, φ₁, φ₂]
     ETDRK2(f, float.(L), typeof(h)(Ts), supersample, h, phis[1], h .* phis[2], h .* phis[3])
 end
 
-function (integ::ETDRK2)(x, u, p, t, args...)
-    (; f, linop, supersample, h, E, hφ₁, hφ₂) = integ
+function (integ::ETDRK2)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
+    (Ts == integ.Ts && supersample == integ.supersample) ||
+        throw(ArgumentError("ETDRK2: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
+    (; f, linop, h, E, hφ₁, hφ₂) = integ
     N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
     k1 = N(x, t)
     a  = E * x + hφ₁ * k1
@@ -557,7 +560,7 @@ struct ETDRK3{F,LT,T,M} <: AbstractIntegrator
     E2::M    # exp(Lh/2)
     hφ₁::M  # h · φ₁(Lh)
     h2φ₁₂::M # (h/2) · φ₁(Lh/2)
-    hφ₂::M  # h · φ₂(Lh)
+    h2φ₂::M  # 2h · φ₂(Lh)
     hφ₃::M  # h · φ₃(Lh)
     # Precomputed stage/update coefficient combinations
     hφ₁m2φ₂::M   # h · (φ₁(Lh) - 2φ₂(Lh))
@@ -568,6 +571,7 @@ end
 
 function ETDRK3(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
     supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
     h = float(Ts) / supersample
     Lf = float.(L)
     phis  = _phi_functions(Lf * h,       3)  # [φ₀, φ₁, φ₂, φ₃] at h
@@ -576,20 +580,22 @@ function ETDRK3(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
     E2, φ₁₂ = phis2[1], phis2[2]
     ETDRK3(f, Lf, typeof(h)(Ts), supersample, h,
         E, E2,
-        h .* φ₁, (h/2) .* φ₁₂, h .* φ₂, h .* φ₃,
+        h .* φ₁, (h/2) .* φ₁₂, 2h .* φ₂, h .* φ₃,
         h .* (φ₁ .- 2 .* φ₂),
         h .* (φ₁ .- 3 .* φ₂ .+ 4 .* φ₃),
         h .* (4 .* φ₂ .- 8 .* φ₃),
         h .* (.- φ₂ .+ 4 .* φ₃))
 end
 
-function (integ::ETDRK3)(x, u, p, t, args...)
-    (; f, linop, supersample, h, E, E2, h2φ₁₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
+function (integ::ETDRK3)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
+    (Ts == integ.Ts && supersample == integ.supersample) ||
+        throw(ArgumentError("ETDRK3: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
+    (; f, linop, h, E, E2, h2φ₁₂, h2φ₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
     N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
     k1 = N(x, t)
     u2 = E2 * x + h2φ₁₂ * k1
     k2 = N(u2, t + h/2)
-    u3 = E * x + hφ₁m2φ₂ * k1 + 2 .* (integ.hφ₂ * k2)
+    u3 = E * x + hφ₁m2φ₂ * k1 + h2φ₂ * k2
     k3 = N(u3, t + h)
     y  = E * x + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
     for _ in 2:supersample
@@ -597,7 +603,7 @@ function (integ::ETDRK3)(x, u, p, t, args...)
         k1 = N(y, t)
         u2 = E2 * y + h2φ₁₂ * k1
         k2 = N(u2, t + h/2)
-        u3 = E * y + hφ₁m2φ₂ * k1 + 2 .* (integ.hφ₂ * k2)
+        u3 = E * y + hφ₁m2φ₂ * k1 + h2φ₂ * k2
         k3 = N(u3, t + h)
         y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
     end
@@ -648,6 +654,7 @@ end
 
 function ETDRK4(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
     supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
     h = float(Ts) / supersample
     Lf = float.(L)
     phis  = _phi_functions(Lf * h,       3)  # [φ₀, φ₁, φ₂, φ₃] at h
@@ -662,8 +669,10 @@ function ETDRK4(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
         h .* (.- φ₂ .+ 4 .* φ₃))
 end
 
-function (integ::ETDRK4)(x, u, p, t, args...)
-    (; f, linop, supersample, h, E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
+function (integ::ETDRK4)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
+    (Ts == integ.Ts && supersample == integ.supersample) ||
+        throw(ArgumentError("ETDRK4: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
+    (; f, linop, h, E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
     N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
     k1 = N(x, t)
     u2 = E2 * x  + h2φ₁₂ * k1
