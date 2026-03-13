@@ -209,6 +209,56 @@ end
     # @btime $discrete_dynamics_rkc2($x, $u, 0, 0); # 842.014 ns (0 allocations: 0 bytes)
 
 
+    @testset "ETDRK" begin
+        @info "Testing ETDRK"
+        # Semilinear system: ẋ = L*x + N(x, u, p, t)
+        # Use a stiff linear part and a simple nonlinear remainder
+        A = [-10.0 1.0; 0.0 -1.0]  # stiff linear part
+        function semilinear(x, u, p, t)
+            A * x + [sin(x[2]); 0.1 * cos(x[1])] .+ [u[1]; 0.0]
+        end
+
+        Ts_etd = 0.05
+        x0 = [1.0, 0.5]
+        u0 = SA[0.2]
+
+        disc_etdrk2 = SeeToDee.ETDRK2(semilinear, A, Ts_etd)
+        disc_etdrk3 = SeeToDee.ETDRK3(semilinear, A, Ts_etd)
+        disc_etdrk4 = SeeToDee.ETDRK4(semilinear, A, Ts_etd)
+        # Reference: highly supersampled RK4
+        disc_rk4_ref = SeeToDee.Rk4(semilinear, Ts_etd; supersample=200)
+
+        @test disc_etdrk2 isa SeeToDee.AbstractIntegrator
+        @test disc_etdrk3 isa SeeToDee.AbstractIntegrator
+        @test disc_etdrk4 isa SeeToDee.AbstractIntegrator
+
+        x_ref  = disc_rk4_ref(x0, u0, 0, 0.0)
+        x_etd2 = disc_etdrk2(x0, u0, 0, 0.0)
+        x_etd3 = disc_etdrk3(x0, u0, 0, 0.0)
+        x_etd4 = disc_etdrk4(x0, u0, 0, 0.0)
+
+        # Tolerances scaled to expected order accuracy at h = Ts_etd = 0.05
+        @test x_etd2 ≈ x_ref atol=1e-3   # 2nd order: O(h^3) ~ 1e-4
+        @test x_etd3 ≈ x_ref atol=1e-4   # 3rd order: O(h^4) ~ 6e-6
+        @test x_etd4 ≈ x_ref atol=1e-6   # 4th order: O(h^5) ~ 3e-7
+
+        # On a purely linear system ETDRK should be exact (up to floating point)
+        function linear_dyn(x, u, p, t)
+            A * x
+        end
+        disc_etdrk4_lin = SeeToDee.ETDRK4(linear_dyn, A, Ts_etd)
+        x_exact = exp(A * Ts_etd) * x0
+        @test disc_etdrk4_lin(x0, u0, 0, 0.0) ≈ x_exact atol=1e-14
+
+        # Test supersample: h = 0.05/4 = 0.0125, O(h^5) ~ 3e-11
+        disc_etdrk4_ss = SeeToDee.ETDRK4(semilinear, A, Ts_etd; supersample=4)
+        @test disc_etdrk4_ss(x0, u0, 0, 0.0) ≈ x_ref atol=1e-8
+
+        # Test with regular Vector input (ETDRK always returns Vector)
+        @test disc_etdrk2(x0, u0, 0, 0.0) isa Vector{Float64}
+        @test disc_etdrk4(x0, u0, 0, 0.0) isa Vector{Float64}
+    end
+
     @testset "batch" begin
         @info "Testing batch"
         include("test_batch.jl")
