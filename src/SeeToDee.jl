@@ -458,6 +458,48 @@ function _phi_functions(Lh::AbstractMatrix, kmax::Int)
     [expM[1:n, k*n+1:(k+1)*n] for k in 0:kmax]
 end
 
+## Shared ETDRK utilities ======================================================
+
+abstract type AbstractETDRK <: AbstractIntegrator end
+
+struct ETDRKCommon{F,LT,T}
+    f::F
+    linop::LT
+    Ts::T
+    supersample::Int
+    h::T
+end
+
+f(integ::AbstractETDRK)           = integ.common.f
+linop(integ::AbstractETDRK)       = integ.common.linop
+Ts(integ::AbstractETDRK)          = integ.common.Ts
+supersample(integ::AbstractETDRK) = integ.common.supersample
+h(integ::AbstractETDRK)           = integ.common.h
+
+# Validate arguments, compute substep h, and return φ-functions φ₀..φ_kmax at h.
+function _etdrk_precompute(L, Ts, supersample, kmax)
+    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
+    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
+    h = float(Ts) / supersample
+    Lf = float.(L)
+    Lf, typeof(h)(Ts), h, _phi_functions(Lf * h, kmax)
+end
+
+# Generic supersample loop shared by all ETDRK callables.
+# step_fn(y, t, N) -> y_next  (called once per substep)
+function _etdrk_call(step_fn, integ, x, u, p, t, args...; Ts, supersample)
+    (Ts == SeeToDee.Ts(integ) && supersample == SeeToDee.supersample(integ)) ||
+        throw(ArgumentError(string(nameof(typeof(integ)), ": Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values.")))
+    _f = f(integ); _linop = linop(integ); _h = h(integ)
+    N(xv, tv) = _f(xv, u, p, tv, args...) - _linop * xv
+    y = x
+    for _ in 1:supersample
+        y = step_fn(y, t, N)
+        t += _h
+    end
+    return y
+end
+
 ## ETDRK2 ======================================================================
 
 """
@@ -485,40 +527,26 @@ k₂ = N(a, tₙ + h)
 xₙ₊₁ = a + h·φ₂(hL)·(k₂ - k₁)
 ```
 """
-struct ETDRK2{F,LT,T,M} <: AbstractIntegrator
-    f::F
-    linop::LT
-    Ts::T
-    supersample::Int
-    h::T
+struct ETDRK2{F,LT,T,M} <: AbstractETDRK
+    common::ETDRKCommon{F,LT,T}
     E::M    # exp(Lh)
     hφ₁::M  # h · φ₁(Lh)
     hφ₂::M  # h · φ₂(Lh)
 end
 
 function ETDRK2(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
-    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
-    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
-    h = float(Ts) / supersample
-    Lh = float.(L) * h
-    phis = _phi_functions(Lh, 2)  # [φ₀, φ₁, φ₂]
-    ETDRK2(f, float.(L), typeof(h)(Ts), supersample, h, phis[1], h .* phis[2], h .* phis[3])
+    Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 2)
+    ETDRK2(ETDRKCommon(f, Lf, Ts_f, supersample, h), phis[1], h .* phis[2], h .* phis[3])
 end
 
-function (integ::ETDRK2)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
-    (Ts == integ.Ts && supersample == integ.supersample) ||
-        throw(ArgumentError("ETDRK2: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
-    (; f, linop, h, E, hφ₁, hφ₂) = integ
-    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
-    y = x
-    for _ in 1:supersample
+function (integ::ETDRK2)(x, u, p, t, args...; Ts=SeeToDee.Ts(integ), supersample=SeeToDee.supersample(integ))
+    _h = h(integ); (; E, hφ₁, hφ₂) = integ
+    _etdrk_call(integ, x, u, p, t, args...; Ts, supersample) do y, t, N
         k1 = N(y, t)
         a  = E * y + hφ₁ * k1
-        k2 = N(a, t + h)
-        y  = a + hφ₂ * (k2 - k1)
-        t += h
+        k2 = N(a, t + _h)
+        a + hφ₂ * (k2 - k1)
     end
-    return y
 end
 
 ## ETDRK3 ======================================================================
@@ -541,59 +569,42 @@ k₃ = N(u₃, tₙ + h)
 xₙ₊₁ = exp(hL)·xₙ + h·(φ₁ - 3φ₂ + 4φ₃)·k₁ + h·(4φ₂ - 8φ₃)·k₂ + h·(-φ₂ + 4φ₃)·k₃
 ```
 """
-struct ETDRK3{F,LT,T,M} <: AbstractIntegrator
-    f::F
-    linop::LT
-    Ts::T
-    supersample::Int
-    h::T
-    E::M     # exp(Lh)
-    E2::M    # exp(Lh/2)
-    hφ₁::M  # h · φ₁(Lh)
-    h2φ₁₂::M # (h/2) · φ₁(Lh/2)
-    h2φ₂::M  # 2h · φ₂(Lh)
-    hφ₃::M  # h · φ₃(Lh)
-    # Precomputed stage/update coefficient combinations
-    hφ₁m2φ₂::M   # h · (φ₁(Lh) - 2φ₂(Lh))
-    hφ₁m3φ₂p4φ₃::M  # h · (φ₁ - 3φ₂ + 4φ₃)
-    h4φ₂m8φ₃::M     # h · (4φ₂ - 8φ₃)
-    hmφ₂p4φ₃::M     # h · (-φ₂ + 4φ₃)
+struct ETDRK3{F,LT,T,M} <: AbstractETDRK
+    common::ETDRKCommon{F,LT,T}
+    E::M            # exp(Lh)
+    E2::M           # exp(Lh/2)
+    h2φ₁₂::M       # (h/2) · φ₁(Lh/2)
+    h2φ₂::M        # 2h · φ₂(Lh)
+    hφ₁m2φ₂::M     # h · (φ₁ - 2φ₂)
+    hφ₁m3φ₂p4φ₃::M # h · (φ₁ - 3φ₂ + 4φ₃)
+    h4φ₂m8φ₃::M    # h · (4φ₂ - 8φ₃)
+    hmφ₂p4φ₃::M    # h · (-φ₂ + 4φ₃)
 end
 
 function ETDRK3(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
-    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
-    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
-    h = float(Ts) / supersample
-    Lf = float.(L)
-    phis  = _phi_functions(Lf * h,       3)  # [φ₀, φ₁, φ₂, φ₃] at h
-    phis2 = _phi_functions(Lf * (h / 2), 1)  # [φ₀, φ₁] at h/2
+    Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 3)
     E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
+    phis2 = _phi_functions(Lf * (h / 2), 1)
     E2, φ₁₂ = phis2[1], phis2[2]
-    ETDRK3(f, Lf, typeof(h)(Ts), supersample, h,
+    ETDRK3(ETDRKCommon(f, Lf, Ts_f, supersample, h),
         E, E2,
-        h .* φ₁, (h/2) .* φ₁₂, 2h .* φ₂, h .* φ₃,
+        (h/2) .* φ₁₂, 2h .* φ₂,
         h .* (φ₁ .- 2 .* φ₂),
         h .* (φ₁ .- 3 .* φ₂ .+ 4 .* φ₃),
         h .* (4 .* φ₂ .- 8 .* φ₃),
         h .* (.- φ₂ .+ 4 .* φ₃))
 end
 
-function (integ::ETDRK3)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
-    (Ts == integ.Ts && supersample == integ.supersample) ||
-        throw(ArgumentError("ETDRK3: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
-    (; f, linop, h, E, E2, h2φ₁₂, h2φ₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
-    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
-    y = x
-    for _ in 1:supersample
+function (integ::ETDRK3)(x, u, p, t, args...; Ts=SeeToDee.Ts(integ), supersample=SeeToDee.supersample(integ))
+    _h = h(integ); (; E, E2, h2φ₁₂, h2φ₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
+    _etdrk_call(integ, x, u, p, t, args...; Ts, supersample) do y, t, N
         k1 = N(y, t)
         u2 = E2 * y + h2φ₁₂ * k1
-        k2 = N(u2, t + h/2)
+        k2 = N(u2, t + _h/2)
         u3 = E * y + hφ₁m2φ₂ * k1 + h2φ₂ * k2
-        k3 = N(u3, t + h)
-        y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
-        t += h
+        k3 = N(u3, t + _h)
+        E * y + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
     end
-    return y
 end
 
 ## ETDRK4 ======================================================================
@@ -620,59 +631,41 @@ k₄ = N(u₄, tₙ + h)
 xₙ₊₁ = exp(hL)·xₙ + h·(φ₁ - 3φ₂ + 4φ₃)·k₁ + 2h·(φ₂ - 2φ₃)·(k₂ + k₃) + h·(-φ₂ + 4φ₃)·k₄
 ```
 """
-struct ETDRK4{F,LT,T,M} <: AbstractIntegrator
-    f::F
-    linop::LT
-    Ts::T
-    supersample::Int
-    h::T
-    E::M     # exp(Lh)
-    E2::M    # exp(Lh/2)
-    hφ₁::M  # h · φ₁(Lh)
-    h2φ₁₂::M # (h/2) · φ₁(Lh/2)
-    hφ₂::M  # h · φ₂(Lh)
-    hφ₃::M  # h · φ₃(Lh)
-    # Precomputed update coefficient combinations
-    hφ₁m3φ₂p4φ₃::M  # h · (φ₁ - 3φ₂ + 4φ₃)
-    h2φ₂m4φ₃::M     # 2h · (φ₂ - 2φ₃)
-    hmφ₂p4φ₃::M     # h · (-φ₂ + 4φ₃)
+struct ETDRK4{F,LT,T,M} <: AbstractETDRK
+    common::ETDRKCommon{F,LT,T}
+    E::M            # exp(Lh)
+    E2::M           # exp(Lh/2)
+    h2φ₁₂::M       # (h/2) · φ₁(Lh/2)
+    hφ₁m3φ₂p4φ₃::M # h · (φ₁ - 3φ₂ + 4φ₃)
+    h2φ₂m4φ₃::M    # 2h · (φ₂ - 2φ₃)
+    hmφ₂p4φ₃::M    # h · (-φ₂ + 4φ₃)
 end
 
 function ETDRK4(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
-    supersample ≥ 1 || throw(ArgumentError("supersample must be positive."))
-    size(L, 1) == size(L, 2) || throw(ArgumentError("L must be a square matrix, got size $(size(L))."))
-    h = float(Ts) / supersample
-    Lf = float.(L)
-    phis  = _phi_functions(Lf * h,       3)  # [φ₀, φ₁, φ₂, φ₃] at h
-    phis2 = _phi_functions(Lf * (h / 2), 1)  # [φ₀, φ₁] at h/2
+    Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 3)
     E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
+    phis2 = _phi_functions(Lf * (h / 2), 1)
     E2, φ₁₂ = phis2[1], phis2[2]
-    ETDRK4(f, Lf, typeof(h)(Ts), supersample, h,
+    ETDRK4(ETDRKCommon(f, Lf, Ts_f, supersample, h),
         E, E2,
-        h .* φ₁, (h/2) .* φ₁₂, h .* φ₂, h .* φ₃,
+        (h/2) .* φ₁₂,
         h .* (φ₁ .- 3 .* φ₂ .+ 4 .* φ₃),
         2h .* (φ₂ .- 2 .* φ₃),
         h .* (.- φ₂ .+ 4 .* φ₃))
 end
 
-function (integ::ETDRK4)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
-    (Ts == integ.Ts && supersample == integ.supersample) ||
-        throw(ArgumentError("ETDRK4: Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values."))
-    (; f, linop, h, E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
-    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
-    y = x
-    for _ in 1:supersample
+function (integ::ETDRK4)(x, u, p, t, args...; Ts=SeeToDee.Ts(integ), supersample=SeeToDee.supersample(integ))
+    _h = h(integ); (; E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
+    _etdrk_call(integ, x, u, p, t, args...; Ts, supersample) do y, t, N
         k1 = N(y, t)
         u2 = E2 * y  + h2φ₁₂ * k1
-        k2 = N(u2, t + h/2)
+        k2 = N(u2, t + _h/2)
         u3 = E2 * y  + h2φ₁₂ * k2
-        k3 = N(u3, t + h/2)
+        k3 = N(u3, t + _h/2)
         u4 = E2 * u2 + h2φ₁₂ * (2 .* k3 .- k1)
-        k4 = N(u4, t + h)
-        y  = E * y + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
-        t += h
+        k4 = N(u4, t + _h)
+        E * y + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
     end
-    return y
 end
 
 ## =============================================================================
