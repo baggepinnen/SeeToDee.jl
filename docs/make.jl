@@ -9,6 +9,7 @@ makedocs(
       # warnonly = [],
       pages = [
             "Home" => "index.md",
+            "Exponential Integrators" => "exponential.md",
             "API" => "api.md",
       ],
       format = Documenter.HTML(prettyurls = haskey(ENV, "CI")),
