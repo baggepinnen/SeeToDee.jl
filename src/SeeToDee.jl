@@ -437,17 +437,11 @@ end
 
 ## Exponential RK methods ======================================================
 
-"""
-    _phi_functions(Lh::AbstractMatrix, kmax::Int)
-
-Compute matrix φ-functions φ₀(Lh), φ₁(Lh), ..., φ_kmax(Lh) using the augmented matrix method.
-
-Returns a vector `[φ₀(Lh), φ₁(Lh), ..., φ_kmax(Lh)]` where:
-- `φ₀(z) = exp(z)`
-- `φₖ(z) = (φₖ₋₁(z) - I/(k-1)!) / z`  for k ≥ 1
-
-Uses the block upper-triangular augmented matrix whose exponential encodes all φ functions simultaneously.
-"""
+# Compute matrix φ-functions φ₀(Lh), φ₁(Lh), ..., φ_kmax(Lh) using the augmented matrix method.
+# Returns a vector [φ₀(Lh), φ₁(Lh), ..., φ_kmax(Lh)] where:
+#   φ₀(z) = exp(z)
+#   φₖ(z) = (φₖ₋₁(z) - I/(k-1)!) / z  for k ≥ 1
+# Uses the block upper-triangular augmented matrix whose exponential encodes all φ functions simultaneously.
 function _phi_functions(Lh::AbstractMatrix, kmax::Int)
     n = size(Lh, 1)
     T = eltype(Lh)
