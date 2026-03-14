@@ -518,13 +518,6 @@ for the substep size `h = Ts / supersample`.
 Exponential integrators exploit the exact linear solution, making them well-suited for
 semilinear stiff systems where the stiffness originates from `L`.
 
-# Algorithm
-```
-k₁ = N(xₙ, tₙ)
-a  = exp(hL)·xₙ + h·φ₁(hL)·k₁
-k₂ = N(a, tₙ + h)
-xₙ₊₁ = a + h·φ₂(hL)·(k₂ - k₁)
-```
 """
 struct ETDRK2{F,LT,T,M} <: AbstractETDRK
     common::ETDRKCommon{F,LT,T}
@@ -558,15 +551,6 @@ Runge-Kutta method (Krogstad 2005) with sample time `Tₛ`.
 
 See [`ETDRK2`](@ref) for details on the interface and semilinear structure.
 
-# Algorithm
-```
-k₁ = N(xₙ, tₙ)
-u₂ = exp(hL/2)·xₙ + (h/2)·φ₁(hL/2)·k₁
-k₂ = N(u₂, tₙ + h/2)
-u₃ = exp(hL)·xₙ + h·(φ₁(hL) - 2φ₂(hL))·k₁ + 2h·φ₂(hL)·k₂
-k₃ = N(u₃, tₙ + h)
-xₙ₊₁ = exp(hL)·xₙ + h·(φ₁ - 3φ₂ + 4φ₃)·k₁ + h·(4φ₂ - 8φ₃)·k₂ + h·(-φ₂ + 4φ₃)·k₃
-```
 """
 struct ETDRK3{F,LT,T,M} <: AbstractETDRK
     common::ETDRKCommon{F,LT,T}
@@ -617,18 +601,6 @@ Runge-Kutta method (ETD4RK, Cox & Matthews 2002) with sample time `Tₛ`.
 See [`ETDRK2`](@ref) for details on the interface and semilinear structure.
 
 In the limit `L → 0`, this method reduces to classical RK4.
-
-# Algorithm
-```
-k₁ = N(xₙ, tₙ)
-u₂ = exp(hL/2)·xₙ + (h/2)·φ₁(hL/2)·k₁
-k₂ = N(u₂, tₙ + h/2)
-u₃ = exp(hL/2)·xₙ + (h/2)·φ₁(hL/2)·k₂
-k₃ = N(u₃, tₙ + h/2)
-u₄ = exp(hL/2)·u₂ + (h/2)·φ₁(hL/2)·(2k₃ - k₁)
-k₄ = N(u₄, tₙ + h)
-xₙ₊₁ = exp(hL)·xₙ + h·(φ₁ - 3φ₂ + 4φ₃)·k₁ + 2h·(φ₂ - 2φ₃)·(k₂ + k₃) + h·(-φ₂ + 4φ₃)·k₄
-```
 """
 struct ETDRK4{F,LT,T,M} <: AbstractETDRK
     common::ETDRKCommon{F,LT,T}
