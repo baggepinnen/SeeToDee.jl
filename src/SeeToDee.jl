@@ -470,11 +470,10 @@ struct ETDRKCommon{F,LT,T}
     h::T
 end
 
-f(integ::AbstractETDRK)           = integ.common.f
-linop(integ::AbstractETDRK)       = integ.common.linop
-Ts(integ::AbstractETDRK)          = integ.common.Ts
-supersample(integ::AbstractETDRK) = integ.common.supersample
-h(integ::AbstractETDRK)           = integ.common.h
+function Base.getproperty(i::AbstractETDRK, s::Symbol)
+    s ∈ fieldnames(typeof(i)) && return getfield(i, s)
+    return getfield(getfield(i, :common), s)
+end
 
 # Validate arguments, compute substep h, and return φ-functions φ₀..φ_kmax at h.
 function _etdrk_precompute(L, Ts, supersample, kmax)
@@ -488,14 +487,14 @@ end
 # Generic supersample loop shared by all ETDRK callables.
 # step_fn(y, t, N) -> y_next  (called once per substep)
 function _etdrk_call(step_fn, integ, x, u, p, t, args...; Ts, supersample)
-    (Ts == SeeToDee.Ts(integ) && supersample == SeeToDee.supersample(integ)) ||
+    (Ts == integ.Ts && supersample == integ.supersample) ||
         throw(ArgumentError(string(nameof(typeof(integ)), ": Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values.")))
-    _f = f(integ); _linop = linop(integ); _h = h(integ)
-    N(xv, tv) = _f(xv, u, p, tv, args...) - _linop * xv
+    f = integ.f; linop = integ.linop; h = integ.h
+    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
     y = x
     for _ in 1:supersample
         y = step_fn(y, t, N)
-        t += _h
+        t += h
     end
     return y
 end
@@ -539,12 +538,12 @@ function ETDRK2(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
     ETDRK2(ETDRKCommon(f, Lf, Ts_f, supersample, h), phis[1], h .* phis[2], h .* phis[3])
 end
 
-function (integ::ETDRK2)(x, u, p, t, args...; Ts=SeeToDee.Ts(integ), supersample=SeeToDee.supersample(integ))
-    _h = h(integ); (; E, hφ₁, hφ₂) = integ
+function (integ::ETDRK2)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
+    (; h, E, hφ₁, hφ₂) = integ
     _etdrk_call(integ, x, u, p, t, args...; Ts, supersample) do y, t, N
         k1 = N(y, t)
         a  = E * y + hφ₁ * k1
-        k2 = N(a, t + _h)
+        k2 = N(a, t + h)
         a + hφ₂ * (k2 - k1)
     end
 end
@@ -595,14 +594,14 @@ function ETDRK3(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
         h .* (.- φ₂ .+ 4 .* φ₃))
 end
 
-function (integ::ETDRK3)(x, u, p, t, args...; Ts=SeeToDee.Ts(integ), supersample=SeeToDee.supersample(integ))
-    _h = h(integ); (; E, E2, h2φ₁₂, h2φ₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
+function (integ::ETDRK3)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
+    (; h, E, E2, h2φ₁₂, h2φ₂, hφ₁m2φ₂, hφ₁m3φ₂p4φ₃, h4φ₂m8φ₃, hmφ₂p4φ₃) = integ
     _etdrk_call(integ, x, u, p, t, args...; Ts, supersample) do y, t, N
         k1 = N(y, t)
         u2 = E2 * y + h2φ₁₂ * k1
-        k2 = N(u2, t + _h/2)
+        k2 = N(u2, t + h/2)
         u3 = E * y + hφ₁m2φ₂ * k1 + h2φ₂ * k2
-        k3 = N(u3, t + _h)
+        k3 = N(u3, t + h)
         E * y + hφ₁m3φ₂p4φ₃ * k1 + h4φ₂m8φ₃ * k2 + hmφ₂p4φ₃ * k3
     end
 end
@@ -654,16 +653,16 @@ function ETDRK4(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
         h .* (.- φ₂ .+ 4 .* φ₃))
 end
 
-function (integ::ETDRK4)(x, u, p, t, args...; Ts=SeeToDee.Ts(integ), supersample=SeeToDee.supersample(integ))
-    _h = h(integ); (; E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
+function (integ::ETDRK4)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
+    (; h, E, E2, h2φ₁₂, hφ₁m3φ₂p4φ₃, h2φ₂m4φ₃, hmφ₂p4φ₃) = integ
     _etdrk_call(integ, x, u, p, t, args...; Ts, supersample) do y, t, N
         k1 = N(y, t)
         u2 = E2 * y  + h2φ₁₂ * k1
-        k2 = N(u2, t + _h/2)
+        k2 = N(u2, t + h/2)
         u3 = E2 * y  + h2φ₁₂ * k2
-        k3 = N(u3, t + _h/2)
+        k3 = N(u3, t + h/2)
         u4 = E2 * u2 + h2φ₁₂ * (2 .* k3 .- k1)
-        k4 = N(u4, t + _h)
+        k4 = N(u4, t + h)
         E * y + hφ₁m3φ₂p4φ₃ * k1 + h2φ₂m4φ₃ * (k2 .+ k3) + hmφ₂p4φ₃ * k4
     end
 end
