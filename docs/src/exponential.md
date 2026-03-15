@@ -67,7 +67,7 @@ stable on the real axis only when ``|\lambda h| \leq 2.79``; at ``T_s = 0.4`` we
 ``|\lambda T_s| = 4.0``, so RK4 diverges immediately while ETDRK4 tracks the reference.
 
 !!! details "Simulation and plot code"
-    ```@example ETDRK_demo
+    ```julia
     using SeeToDee, LinearAlgebra, Plots
 
     const λ = 10.0
