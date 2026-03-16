@@ -117,6 +117,23 @@ B_vec_true = AB_vec_true[1:2, 3:3]
     end
 end
 
+@testset "Exponential Integrators" begin
+    @testset "ETDRK4" begin
+        # simple_dynamics: ẋ = -x + u, so L = [-1;;] and N(x,u,p,t) = u
+        L_etd = SA[-1.0;;]
+        N_etd(x, u, p, t) = u
+        integrator = SeeToDee.ETDRK4(N_etd, Matrix(L_etd), Ts)
+
+        A, B = linearize(integrator, x0, u0, 0, 0.0)
+
+        @test size(A) == (1, 1)
+        @test size(B) == (1, 1)
+        # ETDRK4 should be very accurate (4th order)
+        @test A[1,1] ≈ A_true rtol=1e-6
+        @test B[1,1] ≈ B_true rtol=1e-6
+    end
+end
+
 @testset "Implicit Integrators" begin
     # Implicit integrators need regular vectors, not StaticArrays, for ForwardDiff
     x0_vec = [1.0]

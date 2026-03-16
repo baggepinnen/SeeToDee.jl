@@ -13,6 +13,9 @@ SeeToDee.Heun
 SeeToDee.Rk3
 SeeToDee.Rk4
 SeeToDee.RKC2
+SeeToDee.ETDRK2
+SeeToDee.ETDRK3
+SeeToDee.ETDRK4
 SeeToDee.SimpleColloc
 SeeToDee.Trapezoidal
 SeeToDee.BackwardEuler
