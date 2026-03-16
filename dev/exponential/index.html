@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Exponential Integrators · SeeToDee Documentation</title><meta name="title" content="Exponential Integrators · SeeToDee Documentation"/><meta property="og:title" content="Exponential Integrators · SeeToDee Documentation"/><meta property="twitter:title" content="Exponential Integrators · SeeToDee Documentation"/><meta name="description" content="Documentation for SeeToDee Documentation."/><meta property="og:description" content="Documentation for SeeToDee Documentation."/><meta property="twitter:description" content="Documentation for SeeToDee Documentation."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">SeeToDee Documentation</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Exponential Integrators</a><ul class="internal"><li><a class="tocitem" href="#When-to-use-ETDRK"><span>When to use ETDRK</span></a></li><li><a class="tocitem" href="#Interface"><span>Interface</span></a></li><li><a class="tocitem" href="#Stiffness-demonstration"><span>Stiffness demonstration</span></a></li></ul></li><li><a class="tocitem" href="../api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Exponential Integrators</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Exponential Integrators</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/baggepinnen/SeeToDee.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/baggepinnen/SeeToDee.jl/blob/main/docs/src/exponential.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Exponential-Runge-Kutta-Methods"><a class="docs-heading-anchor" href="#Exponential-Runge-Kutta-Methods">Exponential Runge-Kutta Methods</a><a id="Exponential-Runge-Kutta-Methods-1"></a><a class="docs-heading-anchor-permalink" href="#Exponential-Runge-Kutta-Methods" title="Permalink"></a></h1><p>Exponential Runge-Kutta (ETDRK) methods are designed for semilinear ODEs of the form</p><p class="math-container">\[\dot{x} = Lx + N(x, u, p, t)\]</p><p>where <span>$L$</span> is a constant linear operator (matrix or matrix-like operator) and <span>$N$</span> is the nonlinear remainder. The key idea is to integrate the linear part <strong>exactly</strong> via the matrix exponential <span>$\exp(hL)$</span>, while applying a Runge-Kutta-like correction for the nonlinear part. This eliminates the stability restriction imposed by the stiff eigenvalues of <span>$L$</span>.</p><p>SeeToDee provides three ETDRK variants:</p><table><tr><th style="text-align: right">Method</th><th style="text-align: right">Order</th><th style="text-align: right">Reference</th></tr><tr><td style="text-align: right"><a href="../api/#SeeToDee.ETDRK2"><code>ETDRK2</code></a></td><td style="text-align: right">2</td><td style="text-align: right">Cox &amp; Matthews (2002)</td></tr><tr><td style="text-align: right"><a href="../api/#SeeToDee.ETDRK3"><code>ETDRK3</code></a></td><td style="text-align: right">3</td><td style="text-align: right">Krogstad (2005)</td></tr><tr><td style="text-align: right"><a href="../api/#SeeToDee.ETDRK4"><code>ETDRK4</code></a></td><td style="text-align: right">4</td><td style="text-align: right">Cox &amp; Matthews (2002)</td></tr></table><p>All three share the same interface as every other integrator in this package: <code>x_next = integrator(x, u, p, t)</code>.</p><h2 id="When-to-use-ETDRK"><a class="docs-heading-anchor" href="#When-to-use-ETDRK">When to use ETDRK</a><a id="When-to-use-ETDRK-1"></a><a class="docs-heading-anchor-permalink" href="#When-to-use-ETDRK" title="Permalink"></a></h2><p>Use ETDRK when:</p><ul><li>The system is <strong>semilinear</strong>: stiffness comes exclusively from a known constant linear operator <span>$L$</span>, while the nonlinear part <span>$N$</span> is non-stiff.</li><li>Classical explicit methods (Rk4, Rk3, …) require an impractically small step size to remain stable, because <span>$|\lambda_{\max}(L)| \cdot h$</span> exceeds the stability boundary.</li><li>Implicit methods (Trapezoidal, BackwardEuler, SimpleColloc) work but their nonlinear solve overhead is unnecessary when stiffness is purely linear.</li></ul><p>Typical examples: reaction-diffusion PDEs after spatial discretization, linearized fluid dynamics, stiff chemical kinetics with a dominant linear decay term.</p><h2 id="Interface"><a class="docs-heading-anchor" href="#Interface">Interface</a><a id="Interface-1"></a><a class="docs-heading-anchor-permalink" href="#Interface" title="Permalink"></a></h2><pre><code class="language-julia hljs">using SeeToDee, LinearAlgebra
+
+# Semilinear dynamics:  ẋ = L*x + N(x, u, p, t)
+L_ex = [-10.0  1.0; -1.0 -10.0]   # stiff linear part
+
+N_ex(x, u, p, t) = [5*cos(t) + 0.1*x[2]^2;
+                     3*sin(t) - 0.1*x[1]^2]
+
+Ts = 0.1
+integ = SeeToDee.ETDRK4(N_ex, L_ex, Ts)
+
+x0 = [1.0, 0.0]
+integ(x0, Float64[], nothing, 0.0)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
+  0.6811670821379787
+ -0.04287372415690179</code></pre><p>The matrix exponential and all φ-function matrices are <strong>precomputed at construction</strong>, so repeated calls inside a simulation loop are cheap.</p><p><code>supersample</code> is supported: <code>SeeToDee.ETDRK4(N, L, Ts; supersample=4)</code> divides <code>Ts</code> into 4 sub-steps, each using the full ETDRK4 scheme.</p><h2 id="Stiffness-demonstration"><a class="docs-heading-anchor" href="#Stiffness-demonstration">Stiffness demonstration</a><a id="Stiffness-demonstration-1"></a><a class="docs-heading-anchor-permalink" href="#Stiffness-demonstration" title="Permalink"></a></h2><p>The test problem has eigenvalues <span>$-\lambda \pm i$</span> with <span>$\lambda = 10$</span>.  RK4 is stable on the real axis only when <span>$|\lambda h| \leq 2.79$</span>; at <span>$T_s = 0.4$</span> we have <span>$|\lambda T_s| = 4.0$</span>, so RK4 diverges immediately while ETDRK4 tracks the reference.</p><details class="admonition is-details" id="Simulation-and-plot-code-3d59ae92ec280a5c"><summary class="admonition-header">Simulation and plot code<a class="admonition-anchor" href="#Simulation-and-plot-code-3d59ae92ec280a5c" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">using SeeToDee, LinearAlgebra, Plots
+
+const λ = 10.0
+const L = [-λ 1.0; -1.0 -λ]
+
+N_func(x, u, p, t) = [5*cos(t) + 0.1*x[2]^2;
+                       3*sin(t) - 0.1*x[1]^2]
+dynamics(x, u, p, t) = L * x + N_func(x, u, p, t)
+
+x0 = [1.0, 0.0]
+u  = Float64[]
+
+Ts_traj = 0.4
+N_traj  = 10
+t_traj  = range(0.0, N_traj * Ts_traj; length = N_traj + 1)
+
+ref_traj    = SeeToDee.Rk4(dynamics, Ts_traj; supersample=2000)
+rk4_traj    = SeeToDee.Rk4(dynamics, Ts_traj)
+etdrk4_traj = SeeToDee.ETDRK4(N_func, L, Ts_traj)
+
+function simulate(integ, x0, Ts, N)
+    X = Matrix{Float64}(undef, length(x0), N + 1)
+    X[:, 1] = x0
+    x = copy(x0)
+    for k in 1:N
+        x = integ(x, u, nothing, (k-1)*Ts)
+        X[:, k+1] = x
+    end
+    X
+end
+
+X_ref    = simulate(ref_traj,    x0, Ts_traj, N_traj)
+X_rk4    = simulate(rk4_traj,    x0, Ts_traj, N_traj)
+X_etdrk4 = simulate(etdrk4_traj, x0, Ts_traj, N_traj)
+
+T_conv   = 1.0
+h_values = 10 .^ range(log10(0.004), log10(0.8); length=60)
+h_stab   = 2.79 / λ
+
+ref_conv  = SeeToDee.Rk4(dynamics, T_conv; supersample=50_000)
+x_ref_end = ref_conv(x0, u, nothing, 0.0)
+
+function final_error(integ, x_ref_end, x0, Ts, N)
+    x = copy(x0)
+    for k in 1:N
+        x = integ(x, u, nothing, (k-1)*Ts)
+        any(!isfinite, x) &amp;&amp; return NaN
+    end
+    norm(x - x_ref_end)
+end
+
+e_rk4    = [final_error(SeeToDee.Rk4(dynamics, h),       x_ref_end, x0, h, round(Int, T_conv/h)) for h in h_values]
+e_etdrk4 = [final_error(SeeToDee.ETDRK4(N_func, L, h), x_ref_end, x0, h, round(Int, T_conv/h)) for h in h_values]
+
+p1 = plot(; title = &quot;x₁(t)  —  Ts = $(Ts_traj), |λ·Ts| = $(λ*Ts_traj) &gt; 2.79&quot;,
+xlabel = &quot;time  t&quot;, ylabel = &quot;x₁&quot;, ylims = (-5, 5))
+plot!(p1, t_traj, X_ref[1, :];    color = :black,     lw = 2.5,              label = &quot;Reference&quot;)
+plot!(p1, t_traj, clamp.(X_rk4[1, :], -5.0, 5.0); color = :red, lw = 2.0, ls = :dash, label = &quot;RK4&quot;)
+plot!(p1, t_traj, X_etdrk4[1, :]; color = :royalblue, lw = 2.0, ls = :dash, label = &quot;ETDRK4&quot;)
+
+p2 = plot(; title = &quot;x₂(t)  —  Ts = $(Ts_traj), |λ·Ts| = $(λ*Ts_traj) &gt; 2.79&quot;,
+    xlabel = &quot;time  t&quot;, ylabel = &quot;x₂&quot;, ylims = (-5, 5), legend = false)
+plot!(p2, t_traj, X_ref[2, :];    color = :black,     lw = 2.5)
+plot!(p2, t_traj, clamp.(X_rk4[2, :], -5.0, 5.0); color = :red, lw = 2.0, ls = :dash)
+plot!(p2, t_traj, X_etdrk4[2, :]; color = :royalblue, lw = 2.0, ls = :dash)
+
+fig1 = plot(p1, p2; layout = (1, 2), size = (900, 400))
+
+rk4_mask = isfinite.(e_rk4)
+
+plot(; title = &quot;Convergence: global error at T = $(T_conv) vs step size h&quot;,
+    xlabel = &quot;step size  h&quot;, ylabel = &quot;‖x(T) − x_ref(T)‖&quot;,
+    xscale = :log10, yscale = :log10, size = (800, 500), legend = :topleft)
+vspan!([h_stab], [maximum(h_values)]; color = :red, alpha = 0.08, label = nothing)
+vline!([h_stab]; color = :red, alpha = 0.5, ls = :dash, lw = 1.5, label = nothing)
+annotate!(h_stab * 1.2, 1e-1, text(&quot;RK4 unstable\n(|λ·h| &gt; 2.79)&quot;, 8, :red))
+plot!(h_values[rk4_mask], e_rk4[rk4_mask]; color = :red,       lw = 2, ls = :dash, label = &quot;RK4&quot;)
+fig2 = plot!(h_values,           e_etdrk4;         color = :royalblue, lw = 2, ls = :dash, label = &quot;ETDRK4&quot;)</code></pre></div></details><p><img src="https://github.com/user-attachments/assets/eac1b182-6926-4d17-8cce-0a2b1453fe00" alt="fig1"/></p><p>ETDRK4 tracks the reference closely while RK4 diverges within the first step (clipped at ±5).</p><p><img src="https://github.com/user-attachments/assets/6518a396-2b34-494e-a1b5-98c1c63a67f5" alt="fig2"/></p><p>Both methods are 4th-order accurate for small <span>$h$</span>, but RK4 produces <code>NaN</code> once <span>$h &gt; 2.79/\lambda$</span> (red shaded region) while ETDRK4 remains stable across the full range.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../api/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Monday 16 March 2026 09:52">Monday 16 March 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
