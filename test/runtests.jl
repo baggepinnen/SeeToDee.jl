@@ -214,17 +214,18 @@ end
         # Semilinear system: ẋ = L*x + N(x, u, p, t)
         # Use a stiff linear part and a simple nonlinear remainder
         A = [-10.0 1.0; 0.0 -1.0]  # stiff linear part
-        function semilinear(x, u, p, t)
-            A * x + [sin(x[2]); 0.1 * cos(x[1])] .+ [u[1]; 0.0]
+        function nonlinear(x, u, p, t)
+            [sin(x[2]); 0.1 * cos(x[1])] .+ [u[1]; 0.0]
         end
+        semilinear(x, u, p, t) = A * x + nonlinear(x, u, p, t)
 
         Ts_etd = 0.05
         x0 = [1.0, 0.5]
         u0 = SA[0.2]
 
-        disc_etdrk2 = SeeToDee.ETDRK2(semilinear, A, Ts_etd)
-        disc_etdrk3 = SeeToDee.ETDRK3(semilinear, A, Ts_etd)
-        disc_etdrk4 = SeeToDee.ETDRK4(semilinear, A, Ts_etd)
+        disc_etdrk2 = SeeToDee.ETDRK2(nonlinear, A, Ts_etd)
+        disc_etdrk3 = SeeToDee.ETDRK3(nonlinear, A, Ts_etd)
+        disc_etdrk4 = SeeToDee.ETDRK4(nonlinear, A, Ts_etd)
         # Reference: highly supersampled RK4
         disc_rk4_ref = SeeToDee.Rk4(semilinear, Ts_etd; supersample=200)
 
@@ -243,15 +244,13 @@ end
         @test x_etd4 ≈ x_ref atol=1e-6   # 4th order: O(h^5) ~ 3e-7
 
         # On a purely linear system ETDRK should be exact (up to floating point)
-        function linear_dyn(x, u, p, t)
-            A * x
-        end
-        disc_etdrk4_lin = SeeToDee.ETDRK4(linear_dyn, A, Ts_etd)
+        zero_nonlinear(x, u, p, t) = zero(x)
+        disc_etdrk4_lin = SeeToDee.ETDRK4(zero_nonlinear, A, Ts_etd)
         x_exact = exp(A * Ts_etd) * x0
         @test disc_etdrk4_lin(x0, u0, 0, 0.0) ≈ x_exact atol=1e-14
 
         # Test supersample: h = 0.05/4 = 0.0125, O(h^5) ~ 3e-11
-        disc_etdrk4_ss = SeeToDee.ETDRK4(semilinear, A, Ts_etd; supersample=4)
+        disc_etdrk4_ss = SeeToDee.ETDRK4(nonlinear, A, Ts_etd; supersample=4)
         @test disc_etdrk4_ss(x0, u0, 0, 0.0) ≈ x_ref atol=1e-8
 
         # Test with regular Vector input (ETDRK always returns Vector)

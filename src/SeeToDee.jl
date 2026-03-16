@@ -463,7 +463,7 @@ end
 abstract type AbstractETDRK <: AbstractIntegrator end
 
 struct ETDRKCommon{F,LT,T}
-    f::F
+    N::F
     linop::LT
     Ts::T
     supersample::Int
@@ -489,8 +489,8 @@ end
 function _etdrk_call(step_fn, integ, x, u, p, t, args...; Ts, supersample)
     (Ts == integ.Ts && supersample == integ.supersample) ||
         throw(ArgumentError(string(nameof(typeof(integ)), ": Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values.")))
-    f = integ.f; linop = integ.linop; h = integ.h
-    N(xv, tv) = f(xv, u, p, tv, args...) - linop * xv
+    Nf = integ.N; h = integ.h
+    N(xv, tv) = Nf(xv, u, p, tv, args...)
     y = x
     for _ in 1:supersample
         y = step_fn(y, t, N)
@@ -502,15 +502,16 @@ end
 ## ETDRK2 ======================================================================
 
 """
-    f_discrete = ETDRK2(f, L, Ts; supersample = 1)
+    f_discrete = ETDRK2(N, L, Ts; supersample = 1)
 
 Discretize a semilinear continuous-time dynamics function using a 2nd-order exponential
 Runge-Kutta method (ETD2RK, Cox & Matthews 2002) with sample time `Tₛ`.
 
-The dynamics are assumed to have the form `ẋ = L*x + N(x, u, p, t)` where `L` is a
-constant linear operator (matrix). Only `f` (the full dynamics `f : (x,u,p,t)->ẋ`) and
-`L` need to be provided; the nonlinear remainder `N = f(x,u,p,t) - L*x` is computed
-internally.
+The dynamics are assumed to have the semilinear form
+```math
+\\dot{x} = Lx + N(x, u, p, t)
+```
+where `L` is a constant linear operator (matrix-like operator) and `N` is the nonlinear remainder.
 
 The matrix exponential `exp(L*h)` and φ-functions are precomputed once at construction
 for the substep size `h = Ts / supersample`.
@@ -526,9 +527,9 @@ struct ETDRK2{F,LT,T,M} <: AbstractETDRK
     hφ₂::M  # h · φ₂(Lh)
 end
 
-function ETDRK2(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
+function ETDRK2(N, L::AbstractMatrix, Ts; supersample::Integer = 1)
     Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 2)
-    ETDRK2(ETDRKCommon(f, Lf, Ts_f, supersample, h), phis[1], h .* phis[2], h .* phis[3])
+    ETDRK2(ETDRKCommon(N, Lf, Ts_f, supersample, h), phis[1], h .* phis[2], h .* phis[3])
 end
 
 function (integ::ETDRK2)(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample)
@@ -544,7 +545,7 @@ end
 ## ETDRK3 ======================================================================
 
 """
-    f_discrete = ETDRK3(f, L, Ts; supersample = 1)
+    f_discrete = ETDRK3(N, L, Ts; supersample = 1)
 
 Discretize a semilinear continuous-time dynamics function using a 3rd-order exponential
 Runge-Kutta method (Krogstad 2005) with sample time `Tₛ`.
@@ -564,12 +565,12 @@ struct ETDRK3{F,LT,T,M} <: AbstractETDRK
     hmφ₂p4φ₃::M    # h · (-φ₂ + 4φ₃)
 end
 
-function ETDRK3(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
+function ETDRK3(N, L::AbstractMatrix, Ts; supersample::Integer = 1)
     Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 3)
     E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
     phis2 = _phi_functions(Lf * (h / 2), 1)
     E2, φ₁₂ = phis2[1], phis2[2]
-    ETDRK3(ETDRKCommon(f, Lf, Ts_f, supersample, h),
+    ETDRK3(ETDRKCommon(N, Lf, Ts_f, supersample, h),
         E, E2,
         (h/2) .* φ₁₂, 2h .* φ₂,
         h .* (φ₁ .- 2 .* φ₂),
@@ -593,7 +594,7 @@ end
 ## ETDRK4 ======================================================================
 
 """
-    f_discrete = ETDRK4(f, L, Ts; supersample = 1)
+    f_discrete = ETDRK4(N, L, Ts; supersample = 1)
 
 Discretize a semilinear continuous-time dynamics function using a 4th-order exponential
 Runge-Kutta method (ETD4RK, Cox & Matthews 2002) with sample time `Tₛ`.
@@ -612,12 +613,12 @@ struct ETDRK4{F,LT,T,M} <: AbstractETDRK
     hmφ₂p4φ₃::M    # h · (-φ₂ + 4φ₃)
 end
 
-function ETDRK4(f, L::AbstractMatrix, Ts; supersample::Integer = 1)
+function ETDRK4(N, L::AbstractMatrix, Ts; supersample::Integer = 1)
     Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 3)
     E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
     phis2 = _phi_functions(Lf * (h / 2), 1)
     E2, φ₁₂ = phis2[1], phis2[2]
-    ETDRK4(ETDRKCommon(f, Lf, Ts_f, supersample, h),
+    ETDRK4(ETDRKCommon(N, Lf, Ts_f, supersample, h),
         E, E2,
         (h/2) .* φ₁₂,
         h .* (φ₁ .- 3 .* φ₂ .+ 4 .* φ₃),

@@ -6,7 +6,7 @@ Exponential Runge-Kutta (ETDRK) methods are designed for semilinear ODEs of the 
 \dot{x} = Lx + N(x, u, p, t)
 ```
 
-where ``L`` is a constant linear operator (matrix) and ``N`` is the nonlinear remainder.
+where ``L`` is a constant linear operator (matrix or matrix-like operator) and ``N`` is the nonlinear remainder.
 The key idea is to integrate the linear part **exactly** via the matrix exponential
 ``\exp(hL)``, while applying a Runge-Kutta-like correction for the nonlinear part.
 This eliminates the stability restriction imposed by the stiff eigenvalues of ``L``.
@@ -44,11 +44,11 @@ using SeeToDee, LinearAlgebra
 # Semilinear dynamics:  ẋ = L*x + N(x, u, p, t)
 L_ex = [-10.0  1.0; -1.0 -10.0]   # stiff linear part
 
-f_ex(x, u, p, t) = L_ex * x + [5*cos(t) + 0.1*x[2]^2;
-                                 3*sin(t) - 0.1*x[1]^2]
+N_ex(x, u, p, t) = [5*cos(t) + 0.1*x[2]^2;
+                     3*sin(t) - 0.1*x[1]^2]
 
 Ts = 0.1
-integ = SeeToDee.ETDRK4(f_ex, L_ex, Ts)
+integ = SeeToDee.ETDRK4(N_ex, L_ex, Ts)
 
 x0 = [1.0, 0.0]
 integ(x0, Float64[], nothing, 0.0)
@@ -57,7 +57,7 @@ integ(x0, Float64[], nothing, 0.0)
 The matrix exponential and all φ-function matrices are **precomputed at construction**,
 so repeated calls inside a simulation loop are cheap.
 
-`supersample` is supported: `SeeToDee.ETDRK4(f, L, Ts; supersample=4)` divides
+`supersample` is supported: `SeeToDee.ETDRK4(N, L, Ts; supersample=4)` divides
 `Ts` into 4 sub-steps, each using the full ETDRK4 scheme.
 
 ## Stiffness demonstration
@@ -73,8 +73,9 @@ stable on the real axis only when ``|\lambda h| \leq 2.79``; at ``T_s = 0.4`` we
     const λ = 10.0
     const L = [-λ 1.0; -1.0 -λ]
 
-    dynamics(x, u, p, t) = L * x + [5*cos(t) + 0.1*x[2]^2;
-                                      3*sin(t) - 0.1*x[1]^2]
+    N_func(x, u, p, t) = [5*cos(t) + 0.1*x[2]^2;
+                           3*sin(t) - 0.1*x[1]^2]
+    dynamics(x, u, p, t) = L * x + N_func(x, u, p, t)
 
     x0 = [1.0, 0.0]
     u  = Float64[]
@@ -85,7 +86,7 @@ stable on the real axis only when ``|\lambda h| \leq 2.79``; at ``T_s = 0.4`` we
 
     ref_traj    = SeeToDee.Rk4(dynamics, Ts_traj; supersample=2000)
     rk4_traj    = SeeToDee.Rk4(dynamics, Ts_traj)
-    etdrk4_traj = SeeToDee.ETDRK4(dynamics, L, Ts_traj)
+    etdrk4_traj = SeeToDee.ETDRK4(N_func, L, Ts_traj)
 
     function simulate(integ, x0, Ts, N)
         X = Matrix{Float64}(undef, length(x0), N + 1)
@@ -119,7 +120,7 @@ stable on the real axis only when ``|\lambda h| \leq 2.79``; at ``T_s = 0.4`` we
     end
 
     e_rk4    = [final_error(SeeToDee.Rk4(dynamics, h),       x_ref_end, x0, h, round(Int, T_conv/h)) for h in h_values]
-    e_etdrk4 = [final_error(SeeToDee.ETDRK4(dynamics, L, h), x_ref_end, x0, h, round(Int, T_conv/h)) for h in h_values]
+    e_etdrk4 = [final_error(SeeToDee.ETDRK4(N_func, L, h), x_ref_end, x0, h, round(Int, T_conv/h)) for h in h_values]
     
     p1 = plot(; title = "x₁(t)  —  Ts = $(Ts_traj), |λ·Ts| = $(λ*Ts_traj) > 2.79",
     xlabel = "time  t", ylabel = "x₁", ylims = (-5, 5))
