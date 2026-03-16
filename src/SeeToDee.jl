@@ -455,7 +455,11 @@ function _phi_functions(Lh::AbstractMatrix, kmax::Int)
         end
     end
     expM = exp(M)
-    [expM[1:n, k*n+1:(k+1)*n] for k in 0:kmax]
+    if Lh isa SMatrix
+        [SMatrix{n, n}(expM[1:n, k*n+1:(k+1)*n]) for k in 0:kmax]
+    else
+        [expM[1:n, k*n+1:(k+1)*n] for k in 0:kmax]
+    end
 end
 
 ## Shared ETDRK utilities ======================================================
@@ -486,10 +490,10 @@ end
 
 # Generic supersample loop shared by all ETDRK callables.
 # step_fn(y, t, N) -> y_next  (called once per substep)
-function _etdrk_call(step_fn, integ, x, u, p, t, args...; Ts, supersample)
+function _etdrk_call(step_fn, integ::I, x, u, p, t, args...; Ts, supersample) where I
     (Ts == integ.Ts && supersample == integ.supersample) ||
         throw(ArgumentError(string(nameof(typeof(integ)), ": Ts and supersample are fixed at construction (precomputed matrices). Reconstruct with the new values.")))
-    Nf = integ.N; h = integ.h
+    Nf, h = integ.N, integ.h
     N(xv, tv) = Nf(xv, u, p, tv, args...)
     y = x
     for _ in 1:supersample
@@ -567,9 +571,9 @@ end
 
 function ETDRK3(N, L::AbstractMatrix, Ts; supersample::Integer = 1)
     Lf, Ts_f, h, phis = _etdrk_precompute(L, Ts, supersample, 3)
-    E, φ₁, φ₂, φ₃ = phis[1], phis[2], phis[3], phis[4]
+    E, φ₁, φ₂, φ₃ = phis
     phis2 = _phi_functions(Lf * (h / 2), 1)
-    E2, φ₁₂ = phis2[1], phis2[2]
+    E2, φ₁₂ = phis2
     ETDRK3(ETDRKCommon(N, Lf, Ts_f, supersample, h),
         E, E2,
         (h/2) .* φ₁₂, 2h .* φ₂,

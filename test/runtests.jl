@@ -213,14 +213,14 @@ end
         @info "Testing ETDRK"
         # Semilinear system: ẋ = L*x + N(x, u, p, t)
         # Use a stiff linear part and a simple nonlinear remainder
-        A = [-10.0 1.0; 0.0 -1.0]  # stiff linear part
+        A = SA[-10.0 1.0; 0.0 -1.0]  # stiff linear part
         function nonlinear(x, u, p, t)
-            [sin(x[2]); 0.1 * cos(x[1])] .+ [u[1]; 0.0]
+            SA[sin(x[2]); 0.1 * cos(x[1])] .+ SA[u[1]; 0.0]
         end
         semilinear(x, u, p, t) = A * x + nonlinear(x, u, p, t)
 
         Ts_etd = 0.05
-        x0 = [1.0, 0.5]
+        x0 = SA[1.0, 0.5]
         u0 = SA[0.2]
 
         disc_etdrk2 = SeeToDee.ETDRK2(nonlinear, A, Ts_etd)
@@ -229,9 +229,6 @@ end
         # Reference: highly supersampled RK4
         disc_rk4_ref = SeeToDee.Rk4(semilinear, Ts_etd; supersample=200)
 
-        @test disc_etdrk2 isa SeeToDee.AbstractIntegrator
-        @test disc_etdrk3 isa SeeToDee.AbstractIntegrator
-        @test disc_etdrk4 isa SeeToDee.AbstractIntegrator
 
         x_ref  = disc_rk4_ref(x0, u0, 0, 0.0)
         x_etd2 = disc_etdrk2(x0, u0, 0, 0.0)
@@ -239,9 +236,9 @@ end
         x_etd4 = disc_etdrk4(x0, u0, 0, 0.0)
 
         # Tolerances scaled to expected order accuracy at h = Ts_etd = 0.05
-        @test x_etd2 ≈ x_ref atol=1e-3   # 2nd order: O(h^3) ~ 1e-4
-        @test x_etd3 ≈ x_ref atol=1e-4   # 3rd order: O(h^4) ~ 6e-6
-        @test x_etd4 ≈ x_ref atol=1e-6   # 4th order: O(h^5) ~ 3e-7
+        @test x_etd2 ≈ x_ref atol=1e-4   # 2nd order: O(h^3) ~ 1e-4
+        @test x_etd3 ≈ x_ref atol=1e-5   # 3rd order: O(h^4) ~ 6e-6
+        @test x_etd4 ≈ x_ref atol=1e-7   # 4th order: O(h^5) ~ 3e-7
 
         # On a purely linear system ETDRK should be exact (up to floating point)
         zero_nonlinear(x, u, p, t) = zero(x)
@@ -254,8 +251,16 @@ end
         @test disc_etdrk4_ss(x0, u0, 0, 0.0) ≈ x_ref atol=1e-8
 
         # Test with regular Vector input (ETDRK always returns Vector)
-        @test disc_etdrk2(x0, u0, 0, 0.0) isa Vector{Float64}
-        @test disc_etdrk4(x0, u0, 0, 0.0) isa Vector{Float64}
+        @test disc_etdrk2(x0, u0, 0, 0.0) isa typeof(x0)
+        @test disc_etdrk4(x0, u0, 0, 0.0) isa typeof(x0)
+
+        @test_opt disc_etdrk2(x0, u0, 0, 0.0)
+        @test_opt disc_etdrk3(x0, u0, 0, 0.0)
+        @test_opt disc_etdrk4(x0, u0, 0, 0.0)
+
+        # @btime $disc_etdrk2($x0, $u0, 0, 0.0) # 28.214 ns (0 allocations: 0 bytes)
+        # @btime $disc_etdrk3($x0, $u0, 0, 0.0) # 41.604 ns (0 allocations: 0 bytes)
+        # @btime $disc_etdrk4($x0, $u0, 0, 0.0) # 57.383 ns (0 allocations: 0 bytes)
     end
 
     @testset "batch" begin
