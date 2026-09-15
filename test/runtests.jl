@@ -1,6 +1,7 @@
 using SeeToDee
 using Test
 using StaticArrays
+using ArrayInterface
 using ForwardDiff
 # using NonlinearSolve
 using FastGaussQuadrature
@@ -522,13 +523,13 @@ end
 end
 
 
-# Array types used to test the mutability trait, defined outside of the testset
+# Array types used to test mutability-trait dispatch, defined outside of the testset
 struct ImmutableWrap{N,T} <: AbstractVector{T}
     data::SVector{N,T}
 end
 Base.size(w::ImmutableWrap) = size(w.data)
 Base.getindex(w::ImmutableWrap, i::Int) = w.data[i]
-SeeToDee.mutability(::Type{<:ImmutableWrap}) = SeeToDee.IsImmutable()
+ArrayInterface.ismutable(::Type{<:ImmutableWrap}) = false
 
 struct UndeclaredWrap{N,T} <: AbstractVector{T}
     data::SVector{N,T}
@@ -539,26 +540,19 @@ Base.getindex(w::UndeclaredWrap, i::Int) = w.data[i]
 cartpole_wrapped(x, u, p, t) = ImmutableWrap(cartpole(x, u, p, t))
 
 @testset "mutability trait" begin
-    @test SeeToDee.mutability(SVector{2, Float64}) isa SeeToDee.IsImmutable
-    @test SeeToDee.mutability(SMatrix{2, 2, Float64, 4}) isa SeeToDee.IsImmutable
-    @test SeeToDee.mutability(SA[1.0, 2.0]) isa SeeToDee.IsImmutable
-    @test SeeToDee.mutability(Vector{Float64}) isa SeeToDee.IsMutable
-    @test SeeToDee.mutability(zeros(2)) isa SeeToDee.IsMutable
-    @test SeeToDee.mutability(Matrix{Float32}) isa SeeToDee.IsMutable
-    @test SeeToDee.mutability(MVector{2, Float64}) isa SeeToDee.IsMutable
-    @test SeeToDee.mutability(UndeclaredWrap{2, Float64}) isa SeeToDee.IsMutable
-    @test SeeToDee.mutability(ImmutableWrap{2, Float64}) isa SeeToDee.IsImmutable
+    @test SeeToDee._mutability(SA[1.0, 2.0]) === Val(false)
+    @test SeeToDee._mutability(SA[1.0 2.0; 3.0 4.0]) === Val(false)
+    @test SeeToDee._mutability(zeros(2)) === Val(true)
+    @test SeeToDee._mutability(zeros(Float32, 2, 2)) === Val(true)
+    @test SeeToDee._mutability(MVector{2}(1.0, 2.0)) === Val(true)
+    @test SeeToDee._mutability(UndeclaredWrap(SA[1.0, 2.0])) === Val(true)
+    @test SeeToDee._mutability(ImmutableWrap(SA[1.0, 2.0])) === Val(false)
+    @test @inferred(SeeToDee._mutability(SA[1.0, 2.0])) === Val(false)
+    @test @inferred(SeeToDee._mutability(zeros(2))) === Val(true)
 
     @test SeeToDee._mutable(SA[1.0, 2.0]) isa Vector{Float64}
     v = [1.0, 2.0]
     @test SeeToDee._mutable(v) === v
-
-    if VERSION >= v"1.11"
-        @test Base.ispublic(SeeToDee, :mutability)
-        @test Base.ispublic(SeeToDee, :ArrayMutability)
-        @test Base.ispublic(SeeToDee, :IsMutable)
-        @test Base.ispublic(SeeToDee, :IsImmutable)
-    end
 
     # Dynamics returning an array type declared immutable use the out-of-place code path
     Ts = 0.01
@@ -571,7 +565,6 @@ cartpole_wrapped(x, u, p, t) = ImmutableWrap(cartpole(x, u, p, t))
     @test x_wrapped isa SVector{4, Float64}
     @test x_wrapped ≈ x_ref
 end
-
 
 # Accuracy test
 # using FastGaussQuadrature
