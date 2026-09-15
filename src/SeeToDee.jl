@@ -1,6 +1,6 @@
 module SeeToDee
 
-using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays
+using FastGaussQuadrature, SimpleNonlinearSolve, PreallocationTools, LinearAlgebra, ForwardDiff, StaticArrays, ArrayInterface
 
 export SimpleColloc, AdaptiveStep, SuperSampler
 # public Rk4, Rk3, ForwardEuler, Heun, Trapezoidal, BackwardEuler, ETDRK2, ETDRK3, ETDRK4
@@ -216,6 +216,13 @@ function (DI::SwitchingIntegrator)(args...; kwargs...)
     end
 end
 
+## Array mutability ============================================================
+# The selection between in-place and out-of-place code paths is based on the
+# ArrayInterface.ismutable trait of the array returned by the dynamics function.
+# Array packages declare the mutability of their types by extending
+# ArrayInterface.ismutable(::Type{T}). The Bool is lifted to a Val for dispatch.
+_mutability(x) = Val(ArrayInterface.ismutable(x))
+
 ## RK4 =========================================================================
 
 """
@@ -226,7 +233,7 @@ Discretize a continuous-time dynamics function `f` using RK4 with sample time `T
 
 `supersample` determines the number of internal steps, 1 is often sufficient, but this can be increased to make the integration more accurate. `u` is assumed constant during all steps.
 
-If called with StaticArrays, this integrator is allocation free.
+If called with StaticArrays, this integrator is allocation free. The selection between the allocation-free code path and the in-place code path is determined by the trait `ArrayInterface.ismutable` evaluated on the array returned by `f`. Array types unknown to ArrayInterface are treated as mutable; packages defining immutable array types can declare this by extending `ArrayInterface.ismutable(::Type{T})`.
 """
 struct Rk4{F,TS} <: AbstractIntegrator
     f::F
@@ -242,11 +249,11 @@ end
 function (integ::Rk4{F})(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
     f1 = f(x, u, p, t, args...)
-    _inner_rk4(integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on return type of dynamics
+    _inner_rk4(_mutability(f1), integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on the mutability trait of the return type of the dynamics
 end
 
 
-function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(::Val{false}, integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
     f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2, args...)
@@ -267,7 +274,7 @@ function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t, args...; Ts=integ.Ts,
     return y
 end
 
-function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(::Val{true}, integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
     xi = x .+ (Ts2 / 2) .* f1
@@ -294,8 +301,9 @@ function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersa
     return y
 end
 
-_mutable(x::StaticArray) = Array(x)
-_mutable(x::AbstractArray) = x
+_mutable(x) = _mutable(_mutability(x), x)
+_mutable(::Val{false}, x) = Array(x)
+_mutable(::Val{true}, x) = x
 
 ## RK3 ==========================================================================
 """

@@ -1,6 +1,7 @@
 using SeeToDee
 using Test
 using StaticArrays
+using ArrayInterface
 using ForwardDiff
 # using NonlinearSolve
 using FastGaussQuadrature
@@ -521,6 +522,49 @@ end
 
 end
 
+
+# Array types used to test mutability-trait dispatch, defined outside of the testset
+struct ImmutableWrap{N,T} <: AbstractVector{T}
+    data::SVector{N,T}
+end
+Base.size(w::ImmutableWrap) = size(w.data)
+Base.getindex(w::ImmutableWrap, i::Int) = w.data[i]
+ArrayInterface.ismutable(::Type{<:ImmutableWrap}) = false
+
+struct UndeclaredWrap{N,T} <: AbstractVector{T}
+    data::SVector{N,T}
+end
+Base.size(w::UndeclaredWrap) = size(w.data)
+Base.getindex(w::UndeclaredWrap, i::Int) = w.data[i]
+
+cartpole_wrapped(x, u, p, t) = ImmutableWrap(cartpole(x, u, p, t))
+
+@testset "mutability trait" begin
+    @test SeeToDee._mutability(SA[1.0, 2.0]) === Val(false)
+    @test SeeToDee._mutability(SA[1.0 2.0; 3.0 4.0]) === Val(false)
+    @test SeeToDee._mutability(zeros(2)) === Val(true)
+    @test SeeToDee._mutability(zeros(Float32, 2, 2)) === Val(true)
+    @test SeeToDee._mutability(MVector{2}(1.0, 2.0)) === Val(true)
+    @test SeeToDee._mutability(UndeclaredWrap(SA[1.0, 2.0])) === Val(true)
+    @test SeeToDee._mutability(ImmutableWrap(SA[1.0, 2.0])) === Val(false)
+    @test @inferred(SeeToDee._mutability(SA[1.0, 2.0])) === Val(false)
+    @test @inferred(SeeToDee._mutability(zeros(2))) === Val(true)
+
+    @test SeeToDee._mutable(SA[1.0, 2.0]) isa Vector{Float64}
+    v = [1.0, 2.0]
+    @test SeeToDee._mutable(v) === v
+
+    # Dynamics returning an array type declared immutable use the out-of-place code path
+    Ts = 0.01
+    x = SA[1.0, 0.2, 0.3, 0.4]
+    u = SA[0.5]
+    discrete_ref = SeeToDee.Rk4(cartpole, Ts; supersample=2)
+    discrete_wrapped = SeeToDee.Rk4(cartpole_wrapped, Ts; supersample=2)
+    x_ref = discrete_ref(x, u, 0, 0)
+    x_wrapped = discrete_wrapped(x, u, 0, 0)
+    @test x_wrapped isa SVector{4, Float64}
+    @test x_wrapped ≈ x_ref
+end
 
 # Accuracy test
 # using FastGaussQuadrature
