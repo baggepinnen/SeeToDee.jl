@@ -216,6 +216,42 @@ function (DI::SwitchingIntegrator)(args...; kwargs...)
     end
 end
 
+## Array mutability trait =====================================================
+
+"""
+    ArrayMutability
+
+Abstract supertype of the trait values returned by [`SeeToDee.mutability`](@ref).
+
+The two trait values are
+- `SeeToDee.IsImmutable()`: the array type is immutable. Integrators use an out-of-place code path that constructs new arrays and is allocation free for statically sized arrays.
+- `SeeToDee.IsMutable()`: the array type is mutable. Integrators use an in-place code path that updates preallocated arrays with broadcasted assignment.
+"""
+abstract type ArrayMutability end
+struct IsMutable   <: ArrayMutability end
+struct IsImmutable <: ArrayMutability end
+
+"""
+    mutability(x)
+    mutability(::Type{T})
+
+Trait function indicating whether an array type is mutable or immutable. Returns an instance of a subtype of [`SeeToDee.ArrayMutability`](@ref), either `SeeToDee.IsMutable()` or `SeeToDee.IsImmutable()`.
+
+The trait is evaluated on the array returned by the dynamics function and determines which internal code path an integrator uses, see [`SeeToDee.Rk4`](@ref).
+
+Array types unknown to this package are treated as mutable. `SArray` from StaticArrays is declared immutable. Other packages may declare their own array types by adding a method, for example
+```julia
+SeeToDee.mutability(::Type{<:MyImmutableArray}) = SeeToDee.IsImmutable()
+```
+"""
+mutability(x) = mutability(typeof(x))
+mutability(::Type{<:AbstractArray}) = IsMutable() # Fallback, covers Base arrays and array types unknown to this package
+mutability(::Type{<:SArray}) = IsImmutable()
+
+@static if VERSION >= v"1.11"
+    eval(Meta.parse("public ArrayMutability, IsMutable, IsImmutable, mutability"))
+end
+
 ## RK4 =========================================================================
 
 """
@@ -226,7 +262,7 @@ Discretize a continuous-time dynamics function `f` using RK4 with sample time `T
 
 `supersample` determines the number of internal steps, 1 is often sufficient, but this can be increased to make the integration more accurate. `u` is assumed constant during all steps.
 
-If called with StaticArrays, this integrator is allocation free.
+If called with StaticArrays, this integrator is allocation free. The selection between the allocation-free code path and the in-place code path is determined by the [`SeeToDee.mutability`](@ref) trait of the array returned by `f`.
 """
 struct Rk4{F,TS} <: AbstractIntegrator
     f::F
@@ -242,11 +278,11 @@ end
 function (integ::Rk4{F})(x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     f = integ.f
     f1 = f(x, u, p, t, args...)
-    _inner_rk4(integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on return type of dynamics
+    _inner_rk4(mutability(f1), integ, f1, x, u, p, t, args...; Ts, supersample) # Dispatch depending on the mutability trait of the return type of the dynamics
 end
 
 
-function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(::IsImmutable, integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
     f2 = f(x + Ts2 / 2 * f1, u, p, t + Ts2 / 2, args...)
@@ -267,7 +303,7 @@ function _inner_rk4(integ::Rk4{F}, f1::SArray, x, u, p, t, args...; Ts=integ.Ts,
     return y
 end
 
-function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
+function _inner_rk4(::IsMutable, integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersample=integ.supersample) where F
     Ts2 = Ts / supersample
     f = integ.f
     xi = x .+ (Ts2 / 2) .* f1
@@ -294,8 +330,9 @@ function _inner_rk4(integ::Rk4{F}, f1, x, u, p, t, args...; Ts=integ.Ts, supersa
     return y
 end
 
-_mutable(x::StaticArray) = Array(x)
-_mutable(x::AbstractArray) = x
+_mutable(x) = _mutable(mutability(x), x)
+_mutable(::IsImmutable, x) = Array(x)
+_mutable(::IsMutable, x) = x
 
 ## RK3 ==========================================================================
 """

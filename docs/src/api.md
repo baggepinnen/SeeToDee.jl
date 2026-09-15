@@ -28,3 +28,9 @@ SeeToDee.SwitchingIntegrator
 SeeToDee.linearize
 SeeToDee.initialize
 ```
+
+### Array mutability trait
+```@docs
+SeeToDee.ArrayMutability
+SeeToDee.mutability
+```

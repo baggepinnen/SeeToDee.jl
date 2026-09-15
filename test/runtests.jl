@@ -522,6 +522,57 @@ end
 end
 
 
+# Array types used to test the mutability trait, defined outside of the testset
+struct ImmutableWrap{N,T} <: AbstractVector{T}
+    data::SVector{N,T}
+end
+Base.size(w::ImmutableWrap) = size(w.data)
+Base.getindex(w::ImmutableWrap, i::Int) = w.data[i]
+SeeToDee.mutability(::Type{<:ImmutableWrap}) = SeeToDee.IsImmutable()
+
+struct UndeclaredWrap{N,T} <: AbstractVector{T}
+    data::SVector{N,T}
+end
+Base.size(w::UndeclaredWrap) = size(w.data)
+Base.getindex(w::UndeclaredWrap, i::Int) = w.data[i]
+
+cartpole_wrapped(x, u, p, t) = ImmutableWrap(cartpole(x, u, p, t))
+
+@testset "mutability trait" begin
+    @test SeeToDee.mutability(SVector{2, Float64}) isa SeeToDee.IsImmutable
+    @test SeeToDee.mutability(SMatrix{2, 2, Float64, 4}) isa SeeToDee.IsImmutable
+    @test SeeToDee.mutability(SA[1.0, 2.0]) isa SeeToDee.IsImmutable
+    @test SeeToDee.mutability(Vector{Float64}) isa SeeToDee.IsMutable
+    @test SeeToDee.mutability(zeros(2)) isa SeeToDee.IsMutable
+    @test SeeToDee.mutability(Matrix{Float32}) isa SeeToDee.IsMutable
+    @test SeeToDee.mutability(MVector{2, Float64}) isa SeeToDee.IsMutable
+    @test SeeToDee.mutability(UndeclaredWrap{2, Float64}) isa SeeToDee.IsMutable
+    @test SeeToDee.mutability(ImmutableWrap{2, Float64}) isa SeeToDee.IsImmutable
+
+    @test SeeToDee._mutable(SA[1.0, 2.0]) isa Vector{Float64}
+    v = [1.0, 2.0]
+    @test SeeToDee._mutable(v) === v
+
+    if VERSION >= v"1.11"
+        @test Base.ispublic(SeeToDee, :mutability)
+        @test Base.ispublic(SeeToDee, :ArrayMutability)
+        @test Base.ispublic(SeeToDee, :IsMutable)
+        @test Base.ispublic(SeeToDee, :IsImmutable)
+    end
+
+    # Dynamics returning an array type declared immutable use the out-of-place code path
+    Ts = 0.01
+    x = SA[1.0, 0.2, 0.3, 0.4]
+    u = SA[0.5]
+    discrete_ref = SeeToDee.Rk4(cartpole, Ts; supersample=2)
+    discrete_wrapped = SeeToDee.Rk4(cartpole_wrapped, Ts; supersample=2)
+    x_ref = discrete_ref(x, u, 0, 0)
+    x_wrapped = discrete_wrapped(x, u, 0, 0)
+    @test x_wrapped isa SVector{4, Float64}
+    @test x_wrapped ≈ x_ref
+end
+
+
 # Accuracy test
 # using FastGaussQuadrature
 # using OrdinaryDiffEq
